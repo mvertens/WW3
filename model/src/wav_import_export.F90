@@ -78,9 +78,13 @@ module wav_import_export
   integer , allocatable :: counter_phs0_avg(:)
   real(r8), allocatable :: accum_phs1_avg(:)
   integer , allocatable :: counter_phs1_avg(:)
-  real(r8), allocatable :: accum_pdir0_avg(:)
+ !real(r8), allocatable :: accum_pdir0_avg(:)
+  real(r8), allocatable :: accum_xpdir0_avg(:)
+  real(r8), allocatable :: accum_ypdir0_avg(:)
   integer , allocatable :: counter_pdir0_avg(:)
-  real(r8), allocatable :: accum_pdir1_avg(:)
+ !real(r8), allocatable :: accum_pdir1_avg(:)
+  real(r8), allocatable :: accum_xpdir1_avg(:)
+  real(r8), allocatable :: accum_ypdir1_avg(:)
   integer , allocatable :: counter_pdir1_avg(:)
   real(r8), allocatable :: accum_pTm10_avg(:)
   integer , allocatable :: counter_pTm10_avg(:)
@@ -88,22 +92,49 @@ module wav_import_export
   integer , allocatable :: counter_pTm11_avg(:)
   real(r8), allocatable :: accum_tm1_avg(:)
   integer , allocatable :: counter_tm1_avg(:)
-  real(r8), allocatable :: accum_thm_avg(:)
+ !real(r8), allocatable :: accum_thm_avg(:)
+  real(r8), allocatable :: accum_xthm_avg(:)
+  real(r8), allocatable :: accum_ythm_avg(:)
   integer , allocatable :: counter_thm_avg(:)
-  real(r8), allocatable :: accum_thp0_avg(:)
+  real(r8), allocatable :: accum_xthp0_avg(:)
+  real(r8), allocatable :: accum_ythp0_avg(:)
   integer , allocatable :: counter_thp0_avg(:)
+  real(r8), allocatable :: accum_faw_avg(:)
+  integer , allocatable :: counter_faw_avg(:)
   real(r8), allocatable :: accum_fp0_avg(:)
   integer , allocatable :: counter_fp0_avg(:)
   real(r8), allocatable :: accum_u_avg(:)
   integer , allocatable :: counter_u_avg(:)
   real(r8), allocatable :: accum_v_avg(:)
   integer , allocatable :: counter_v_avg(:)
+  real(r8), allocatable :: accum_cu_avg(:)
+  integer , allocatable :: counter_cu_avg(:)
+  real(r8), allocatable :: accum_cv_avg(:)
+  integer , allocatable :: counter_cv_avg(:)
   real(r8), allocatable :: accum_tusx_avg(:)
   integer , allocatable :: counter_tusx_avg(:)
   real(r8), allocatable :: accum_tusy_avg(:)
   integer , allocatable :: counter_tusy_avg(:)
+  real(r8), allocatable :: accum_lamult_avg(:)
+  integer , allocatable :: counter_lamult_avg(:)
+  real(r8), allocatable :: accum_charn_avg(:)
+  integer , allocatable :: counter_charn_avg(:)
+  real(r8), allocatable :: accum_tm02_avg(:)
+  integer , allocatable :: counter_tm02_avg(:)
+  real(r8), allocatable :: accum_foc_avg(:)
+  integer , allocatable :: counter_foc_avg(:)
+  real(r8), allocatable :: accum_ifrac_avg(:)
+  integer , allocatable :: counter_ifrac_avg(:)
+  real(r8), allocatable :: accum_thick_avg(:)
+  integer , allocatable :: counter_thick_avg(:)
+  real(r8), allocatable :: accum_tauicex_avg(:)
+  integer , allocatable :: counter_tauicex_avg(:)
+  real(r8), allocatable :: accum_tauicey_avg(:)
+  integer , allocatable :: counter_tauicey_avg(:)
 
   private :: accumulate
+  private :: accumulatehs
+  private :: accumulateangle
 
   !===============================================================================
 contains
@@ -201,11 +232,22 @@ contains
        call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_Tm1_avg')
        call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_thm_avg')
        call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_thp0_avg')
+       call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_faw_avg')
        call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_fp0_avg')
        call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_u_avg')
        call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_v_avg')
+       call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_cu_avg')
+       call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_cv_avg')
        call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_tusx_avg')
        call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_tusy_avg')
+       call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_lamult_avg')
+       call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_charn_avg')
+       call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_tm02_avg')
+       call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_foc_avg')
+       call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_ifrac_avg')
+       call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_thick_avg')
+       call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_tauicex_avg')
+       call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_tauicey_avg')
     end if
 
     ! AA TODO: In the above fldlist_add calls, we are passing hardcoded ungridded_ubound values (3) because, USSPF(2)
@@ -908,7 +950,6 @@ contains
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
        call accumulate(dataptr, counter_ustokes_avg, accum_ustokes_avg, sec_next, fillvalue, USSX)
     end if
-
     if (state_fldchk(exportState, 'Sw_vstokes_avg')) then
        call state_getfldptr(exportState, 'Sw_vstokes_avg', dataptr, rc=rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
@@ -926,28 +967,32 @@ contains
     if (state_fldchk(exportState, 'Sw_phs0_avg')) then
        call state_getfldptr(exportState, 'Sw_phs0_avg', dataptr, rc=rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
-       call accumulate(dataptr, counter_phs0_avg, accum_phs0_avg, sec_next, fillvalue, PHS(:,0))
+      !call accumulate(dataptr, counter_phs0_avg, accum_phs0_avg, sec_next, fillvalue, PHS(:,0))
+       call accumulatehs(dataptr, counter_phs0_avg, accum_phs0_avg, sec_next, fillvalue, PHS(:,0))
     end if
 
     ! Swell siginificant wave height = Partition 1 of HS if NOSWLL=1
     if (state_fldchk(exportState, 'Sw_phs1_avg')) then
        call state_getfldptr(exportState, 'Sw_phs1_avg', dataptr, rc=rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
-       call accumulate(dataptr, counter_phs1_avg, accum_phs1_avg, sec_next, fillvalue, PHS(:,NOSWLL))
+      !call accumulate  (dataptr, counter_phs1_avg, accum_phs1_avg, sec_next, fillvalue, PHS(:,NOSWLL))
+       call accumulatehs(dataptr, counter_phs1_avg, accum_phs1_avg, sec_next, fillvalue, PHS(:,NOSWLL))
     end if
 
     ! Wind sea mean direction = Partition 0 of DIR
     if (state_fldchk(exportState, 'Sw_pdir0_avg')) then
        call state_getfldptr(exportState, 'Sw_pdir0_avg', dataptr, rc=rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
-       call accumulate(dataptr, counter_pdir0_avg, accum_pdir0_avg, sec_next, fillvalue, PDIR(:,0))
+      !call accumulate     (dataptr, counter_pdir0_avg, accum_pdir0_avg,                     sec_next, fillvalue, PDIR(:,0))
+       call accumulateangle(dataptr, counter_pdir0_avg, accum_xpdir0_avg,  accum_ypdir0_avg, sec_next, fillvalue, PDIR(:,0))
     end if
 
     ! Swell mean direction = Partition 1 of DIR if NOSWLL=1
     if (state_fldchk(exportState, 'Sw_pdir1_avg')) then
        call state_getfldptr(exportState, 'Sw_pdir1_avg', dataptr, rc=rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
-       call accumulate(dataptr, counter_pdir1_avg, accum_pdir1_avg, sec_next, fillvalue, PDIR(:,NOSWLL))
+      !call accumulate     (dataptr, counter_pdir1_avg, accum_pdir1_avg,                    sec_next, fillvalue, PDIR(:,NOSWLL))
+       call accumulateangle(dataptr, counter_pdir1_avg, accum_xpdir1_avg, accum_ypdir1_avg, sec_next, fillvalue, PDIR(:,NOSWLL))
     end if
 
     ! Wind sea first moment period
@@ -975,14 +1020,23 @@ contains
     if (state_fldchk(exportState, 'Sw_thm_avg')) then
        call state_getfldptr(exportState, 'Sw_thm_avg', dataptr, rc=rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
-       call accumulate(dataptr, counter_Thm_avg, accum_Thm_avg, sec_next, fillvalue, THM)
+      !call accumulate     (dataptr, counter_Thm_avg, accum_Thm_avg,                  sec_next, fillvalue, THM)
+       call accumulateangle(dataptr, counter_thm_avg, accum_xthm_avg, accum_ythm_avg, sec_next, fillvalue, THM)
     end if
 
     ! Peak direction
     if (state_fldchk(exportState, 'Sw_thp0_avg')) then
        call state_getfldptr(exportState, 'Sw_thp0_avg', dataptr, rc=rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
-       call accumulate(dataptr, counter_thp0_avg, accum_thp0_avg, sec_next, fillvalue, THP0)
+   !   call accumulate(dataptr, counter_thp0_avg, accum_thp0_avg, sec_next, fillvalue, THP0)
+       call accumulateangle(dataptr, counter_thp0_avg, accum_xthp0_avg, accum_ythp0_avg, sec_next, fillvalue, THP0)
+    end if
+
+    !  Wind to wave energy flux W/m3
+    if (state_fldchk(exportState, 'Sw_faw_avg')) then
+       call state_getfldptr(exportState, 'Sw_faw_avg', dataptr, rc=rc)
+       if (ChkErr(rc,__LINE__,u_FILE_u)) return
+       call accumulate(dataptr, counter_faw_avg, accum_faw_avg, sec_next, fillvalue, PHIAW)
     end if
 
     ! Peak frequency
@@ -993,21 +1047,45 @@ contains
     end if
 
     ! Input zonal wind
-    if (state_fldchk(exportState, 'Sw_u_avg') .and. state_fldchk(importState, 'Sa_u10m')) then
+    if (state_fldchk(exportState, 'Sw_u_avg')) then
        call state_getfldptr(exportState, 'Sw_u_avg', dataptr, rc=rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
-       call state_getfldptr(importState, 'Sa_u10m', sa_u, rc=rc)
+       if      (state_fldchk(importState, 'Sa_u10n')) then
+         call state_getfldptr(importState,'Sa_u10n', sa_u, rc=rc)
+       else if (state_fldchk(importState, 'Sa_u')) then
+         call state_getfldptr(importState,'Sa_u', sa_u, rc=rc)
+       endif
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
        call accumulate(dataptr, counter_u_avg, accum_u_avg, sec_next, fillvalue, real(sa_u))
     end if
 
     ! Input meridional wind
-    if (state_fldchk(exportState, 'Sw_v_avg') .and. state_fldchk(importState, 'Sa_v10m')) then
+    if (state_fldchk(exportState, 'Sw_v_avg')) then
        call state_getfldptr(exportState, 'Sw_v_avg', dataptr, rc=rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
-       call state_getfldptr(importState, 'Sa_v10m', sa_v, rc=rc)
+       if      (state_fldchk(importState, 'Sa_v10n')) then
+         call state_getfldptr(importState,'Sa_v10n', sa_v, rc=rc)
+       else if (state_fldchk(importState, 'Sa_v')) then
+         call state_getfldptr(importState,'Sa_v', sa_v, rc=rc)
+       endif
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
        call accumulate(dataptr, counter_v_avg, accum_v_avg, sec_next, fillvalue, real(sa_v))
+    end if
+
+    ! zonal surface ocean current from the ocean model
+    if (state_fldchk(exportState, 'Sw_cu_avg') .and. state_fldchk(importState, 'So_u')) then
+       call state_getfldptr(exportState, 'Sw_cu_avg', dataptr, rc=rc)
+       if (ChkErr(rc,__LINE__,u_FILE_u)) return
+       call state_getfldptr(importState, 'So_u', so_u, rc=rc)
+       call accumulate(dataptr, counter_cu_avg, accum_cu_avg, sec_next, fillvalue, real(so_u))
+    end if
+
+    ! meridional surface ocean current from the ocean model
+    if (state_fldchk(exportState, 'Sw_cv_avg') .and. state_fldchk(importState, 'So_v')) then
+       call state_getfldptr(exportState, 'Sw_cv_avg', dataptr, rc=rc)
+       if (ChkErr(rc,__LINE__,u_FILE_u)) return
+       call state_getfldptr(importState, 'So_v', so_v, rc=rc)
+       call accumulate(dataptr, counter_cv_avg, accum_cv_avg, sec_next, fillvalue, real(so_v))
     end if
 
     ! Stokes transport u component
@@ -1030,12 +1108,69 @@ contains
        call accumulate(dataptr, counter_tusy_avg, accum_tusy_avg, sec_next, fillvalue, TUSY)
     end if
 
+    ! Langmuir number
+     if (state_fldchk(exportState, 'Sw_lamult_avg')) then
+       call state_getfldptr(exportState, 'Sw_lamult_avg', dataptr, rc=rc)
+       if (ChkErr(rc,__LINE__,u_FILE_u)) return
+       call accumulate(dataptr, counter_lamult_avg, accum_lamult_avg, sec_next, fillvalue, LAMULT)
+    end if
+
+    ! Charnock parameter for air-sea friction (dimensionless)
+     if (state_fldchk(exportState, 'Sw_charn_avg')) then
+       call state_getfldptr(exportState, 'Sw_charn_avg', dataptr, rc=rc)
+       if (ChkErr(rc,__LINE__,u_FILE_u)) return
+       call accumulate(dataptr, counter_charn_avg, accum_charn_avg, sec_next, fillvalue, charn)
+    end if
+
+    ! Mean second  moment period s
+    if (state_fldchk(exportState, 'Sw_tm02_avg')) then
+       call state_getfldptr(exportState, 'Sw_tm02_avg', dataptr, rc=rc)
+       if (ChkErr(rc,__LINE__,u_FILE_u)) return
+       call accumulate(dataptr, counter_tm02_avg, accum_tm02_avg, sec_next, fillvalue, T02)
+    end if
+
+   ! Wave to ocean energy flux W/m3
+    if (state_fldchk(exportState, 'Sw_foc_avg')) then
+       call state_getfldptr(exportState, 'Sw_foc_avg', dataptr, rc=rc)
+       if (ChkErr(rc,__LINE__,u_FILE_u)) return
+       call accumulate(dataptr, counter_foc_avg, accum_foc_avg, sec_next, fillvalue, PHIOC)
+    end if
+
+    ! sea ice fraction coming from the ice model and not from the wave model
+    if (state_fldchk(exportState, 'Sw_ifrac_avg') .and. state_fldchk(importState, 'Si_ifrac')) then
+       call state_getfldptr(exportState, 'Sw_ifrac_avg', dataptr, rc=rc)
+       if (ChkErr(rc,__LINE__,u_FILE_u)) return
+       call state_getfldptr(importState, 'Si_ifrac', si_ifrac, rc=rc)
+       call accumulate(dataptr, counter_ifrac_avg, accum_ifrac_avg, sec_next, fillvalue, real(si_ifrac))
+    end if
+
+    ! sea ice thickness coming from the ice model and not from the wave model
+    if (state_fldchk(exportState, 'Sw_thick_avg') .and. state_fldchk(importState, 'Si_thick')) then
+       call state_getfldptr(exportState, 'Sw_thick_avg', dataptr, rc=rc)
+       if (ChkErr(rc,__LINE__,u_FILE_u)) return
+       call state_getfldptr(importState, 'Si_thick', si_thick, rc=rc)
+       call accumulate(dataptr, counter_thick_avg, accum_thick_avg, sec_next, fillvalue, real(si_thick))
+    end if
+
+    ! Wave to ice stress x component
+        if (state_fldchk(exportState, 'Sw_tauicex_avg')) then
+       call state_getfldptr(exportState, 'Sw_tauicex_avg', dataptr, rc=rc)
+       if (ChkErr(rc,__LINE__,u_FILE_u)) return
+       call accumulate(dataptr, counter_tauicex_avg, accum_tauicex_avg, sec_next, fillvalue, TAUICE(:,1))
+    end if
+    ! Wave to ice stress y component
+        if (state_fldchk(exportState, 'Sw_tauicey_avg')) then
+       call state_getfldptr(exportState, 'Sw_tauicey_avg', dataptr, rc=rc)
+       if (ChkErr(rc,__LINE__,u_FILE_u)) return
+       call accumulate(dataptr, counter_tauicey_avg, accum_tauicey_avg, sec_next, fillvalue, TAUICE(:,2))
+    end if
+
     if (dbug_flag > 5) then
        call state_diagnose(exportState, 'at export ', rc=rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
     end if
 
- end subroutine export_fields
+  end subroutine export_fields
 
   !===============================================================================
   !> Add a fieldname to a list of fields in a state
@@ -1179,7 +1314,6 @@ contains
       ! local variables
       type(ESMF_Distgrid) :: distgrid
       type(ESMF_Grid)     :: grid
-      real(ESMF_KIND_R8), pointer :: fldptr2d(:,:)
       character(len=*), parameter :: subname='(wav_import_export:SetScalarField)'
       ! ----------------------------------------------
 
@@ -1195,11 +1329,6 @@ contains
       field = ESMF_FieldCreate(name=trim(flds_scalar_name), grid=grid, typekind=ESMF_TYPEKIND_R8, &
            ungriddedLBound=(/1/), ungriddedUBound=(/flds_scalar_num/), gridToFieldMap=(/2/), rc=rc) ! num of scalar values
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
-
-      ! initialize fldptr to zero
-      call ESMF_FieldGet(field, farrayPtr=fldptr2d, rc=rc)
-      if (ChkErr(rc,__LINE__,u_FILE_u)) return
-      fldptr2d(:,:) = 0.0
 
     end subroutine SetScalarField
 
@@ -1999,5 +2128,114 @@ contains
         endif
      enddo
   end subroutine accumulate
+
+ !========================================================================
+  subroutine accumulatehs(dataptr, counter, accum, sec_next, fillvalue, ww3data)
+
+     use w3gdatmd  , only : mapsf
+     use w3gdatmd  , only : mapsta
+     use constants , only : UNDEF
+
+    ! input/output variables
+     real(r8)              , intent(inout) :: dataptr(:)
+     integer , allocatable , intent(inout) :: counter(:)
+     real(r8), allocatable , intent(inout) :: accum(:)
+     integer               , intent(in)    :: sec_next
+     real(r8)              , intent(in)    :: fillvalue
+     real                  , intent(in)    :: ww3data(:)
+
+     ! local variables
+     integer :: isea, jsea
+     integer :: ix, iy
+     !---------------------------------------------------------------------------
+
+     if (.not. allocated(counter)) then
+        allocate(counter(nseal_cpl))
+        counter(:) = 0
+        allocate(accum(nseal_cpl))
+        accum(:) = 0._r8
+     end if
+
+     dataptr(:) = fillvalue
+     do jsea=1, nseal_cpl
+        call init_get_isea(isea, jsea)
+        ix = mapsf(isea,1)
+        iy = mapsf(isea,2)
+        if (mapsta(iy,ix) == 1) then
+           if (ww3data(jsea) /= UNDEF) then
+              counter(jsea) = counter(jsea) + 1
+              accum(jsea) = accum(jsea) + ww3data(jsea)
+           end if
+           if (sec_next == 0) then
+              if (counter(jsea) /= 0) then
+                 dataptr(jsea) = accum(jsea) / counter(jsea)
+              else
+                 dataptr(jsea) = 0
+              end if
+              counter(jsea) = 0
+              accum(jsea) = 0._r8
+           end if
+        else
+           dataptr(jsea) = 0.
+        endif
+     enddo
+   end subroutine accumulatehs
+
+   !========================================================================
+   subroutine accumulateangle(dataptr, counter, xaccum, yaccum, sec_next, fillvalue, ww3data)
+
+     use w3gdatmd  , only : mapsf
+     use w3gdatmd  , only : mapsta
+     use constants , only : UNDEF
+
+    ! input/output variables
+     real(r8)              , intent(inout) :: dataptr(:)
+     integer , allocatable , intent(inout) :: counter(:)
+     real(r8), allocatable , intent(inout) :: xaccum(:)
+     real(r8), allocatable , intent(inout) :: yaccum(:)
+     integer               , intent(in)    :: sec_next
+     real(r8)              , intent(in)    :: fillvalue
+     real                  , intent(in)    :: ww3data(:)
+
+
+     ! local variables
+     integer :: isea, jsea
+     integer :: ix, iy
+     !---------------------------------------------------------------------------
+
+     if (.not. allocated(counter)) then
+        allocate(counter(nseal_cpl))
+        counter(:) = 0
+        allocate(xaccum(nseal_cpl))
+        allocate(yaccum(nseal_cpl))
+        xaccum(:) = 0._r8
+        yaccum(:) = 0._r8
+
+     end if
+
+     dataptr(:) = fillvalue
+     do jsea=1, nseal_cpl
+        call init_get_isea(isea, jsea)
+        ix = mapsf(isea,1)
+        iy = mapsf(isea,2)
+        if (mapsta(iy,ix) == 1) then
+           if (ww3data(jsea) /= UNDEF) then
+              counter(jsea) = counter(jsea) + 1
+              xaccum(jsea) = xaccum(jsea) + cos( ww3data(jsea) )
+              yaccum(jsea) = yaccum(jsea) + sin( ww3data(jsea) )
+           end if
+           if (sec_next == 0) then
+              if (counter(jsea) /= 0) then
+                 dataptr(jsea)= atan2(yaccum(jsea)/counter(jsea),xaccum(jsea)/counter(jsea))
+              end if
+              counter(jsea) = 0
+              xaccum(jsea) = 0._r8
+              yaccum(jsea) = 0._r8
+           end if
+        else
+           dataptr(jsea) = 0.
+        endif
+     enddo
+   end subroutine accumulateangle
 
 end module wav_import_export
