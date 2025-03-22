@@ -708,18 +708,17 @@ contains
     !--------------------------------------------------------------------
 
     if (cesmcoupled) then
-      if (len_trim(inst_suffix) > 0) then
-        user_restfname = trim(casename)//'.ww3'//trim(inst_suffix)//'.r.'
-        user_histfname = trim(casename)//'.ww3'//trim(inst_suffix)//'.hi.'
-      else
-        user_restfname = trim(casename)//'.ww3.r.'
-        user_histfname = trim(casename)//'.ww3.hi.'
-      endif
+       if (len_trim(inst_suffix) > 0) then
+          user_restfname = trim(casename)//'.ww3'//trim(inst_suffix)//'.r.'
+          user_histfname = trim(casename)//'.ww3'//trim(inst_suffix)//'.hi.'
+       else
+          user_restfname = trim(casename)//'.ww3.r.'
+          user_histfname = trim(casename)//'.ww3.hi.'
+      end if
 
       ! netcdf is used for CESM history and restart
       use_historync = .true.
       use_restartnc = .true.
-      write(6,*)'DEBUG: use_historync = ',use_historync
     else
       call NUOPC_CompAttributeGet(gcomp, name='use_restartnc', value=cvalue, isPresent=isPresent, isSet=isSet, rc=rc)
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
@@ -1543,22 +1542,18 @@ contains
 
     ! local variables
     integer           :: ierr
-    integer           :: unitn  ! namelist unit number
-    !integer           :: shrlogunit
+    integer           :: unitn     ! namelist unit number
     logical           :: isPresent, isSet
     real(r8)          :: dtmax_in  ! Maximum overall time step.
     real(r8)          :: dtmin_in  ! Minimum dynamic time step for source
     real(r8)          :: dtcfl_in  ! Maximum CFL time step X-Y propagation.
     real(r8)          :: dtcfli_in ! Maximum CFL time step X-Y propagation intra-spectral
     integer           :: stdout
+    character(len=CL) :: branch_fname
     character(len=*), parameter    :: subname = '(wav_comp_nuopc:wavinit_cesm)'
     ! -------------------------------------------------------------------
 
-#ifdef W3_CESMCOUPLED
     namelist /ww3_inparm/ initfile, dtcfl, dtcfli, dtmax, dtmin, history_option, history_n
-#else
-    namelist /ww3_inparm/ initfile, dtcfl, dtcfli, dtmax, dtmin
-#endif
 
     rc = ESMF_SUCCESS
     if (dbug_flag > 5) call ESMF_LogWrite(trim(subname)//' called', ESMF_LOGMSG_INFO)
@@ -1605,6 +1600,10 @@ contains
            ESMF_LOGMSG_ERROR, line=__LINE__, file=u_FILE_u)
       rc = ESMF_FAILURE
       return
+    end if
+    ! Set branch_fname to initfile for branch runs
+    if (runtype == 'branch') then
+       branch_fname = trim(initfile) ! this will be a netcdf restart in this case
     end if
     call mpi_bcast(dtcfl, 1, MPI_INTEGER, 0, mpi_comm, ierr)
     if (ierr /= MPI_SUCCESS) then
@@ -1653,6 +1652,9 @@ contains
     dtcfli_in = dtcfli
     dtmin_in  = dtmin
 
+    !
+
+
     ! Read the namelist settings in ww3_shel.nml
     call ESMF_LogWrite(trim(subname)//' call read_shel_config', ESMF_LOGMSG_INFO)
     call read_shel_config(mpi_comm, mds, time0_overwrite=time0, timen_overwrite=timen)
@@ -1691,8 +1693,13 @@ contains
     ! IsMulti does not appear to be used, setting to .false.
 
     call ESMF_LogWrite(trim(subname)//' call w3init', ESMF_LOGMSG_INFO)
-    call w3init ( 1, .false., 'ww3', mds, ntrace, odat, flgrd, flgr2, flgd, flg2, &
-         npts, x, y, pnames, iprt, prtfrm, mpi_comm )
+    if (cesmcoupled .and. runtype == 'branch') then
+       call w3init ( 1, .false., 'ww3', mds, ntrace, odat, flgrd, flgr2, flgd, flg2, &
+            npts, x, y, pnames, iprt, prtfrm, mpi_comm, branch_fname=initfile)
+    else
+       call w3init ( 1, .false., 'ww3', mds, ntrace, odat, flgrd, flgr2, flgd, flg2, &
+            npts, x, y, pnames, iprt, prtfrm, mpi_comm)
+    end if
 
     ! NOTE: these need to be set again AFTER w3init is run - since these values will be overwritten
     ! by the read of mod_def.ww3

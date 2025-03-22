@@ -160,7 +160,7 @@ CONTAINS
   !> @author H. L. Tolman  @date 03-Sep-2012
   !>
   SUBROUTINE W3INIT ( IMOD, IsMulti, FEXT, MDS, MTRACE, ODAT, FLGRD,  FLGR2, FLGD, &
-       FLG2, NPT, XPT, YPT, PNAMES, IPRT, PRTFRM, MPI_COMM, FLAGSTIDEIN)
+       FLG2, NPT, XPT, YPT, PNAMES, IPRT, PRTFRM, MPI_COMM, FLAGSTIDEIN, branch_fname)
     !/
     !/                  +-----------------------------------+
     !/                  | WAVEWATCH III           NOAA/NCEP |
@@ -472,6 +472,7 @@ CONTAINS
     CHARACTER(LEN=40), INTENT(IN) :: PNAMES(NPT)
     LOGICAL, INTENT(IN), OPTIONAL :: FLAGSTIDEIN(4)
     INTEGER                       :: NSEALout, NSEALMout
+    CHARACTER(LEN=*), OPTIONAL    :: branch_fname
     !/
     !/ ------------------------------------------------------------------- /
     !/ Local parameters
@@ -963,13 +964,22 @@ CONTAINS
     !
     VA(:,:) = 0.
     if (use_restartnc) then
-      if (runtype == 'continue' )then
-        call set_user_timestring(time,user_timestring)
-        if (restart_from_binary) then
-          fname = trim(user_restfname)//trim(user_timestring)
-        else
-          fname = trim(user_restfname)//trim(user_timestring)//'.nc'
-        endif
+      if (runtype == 'continue' .or. runtype == 'branch') then
+        if (runtype == 'continue') then
+           call set_user_timestring(time,user_timestring)
+           if (restart_from_binary) then
+              fname = trim(user_restfname)//trim(user_timestring)
+           else
+              fname = trim(user_restfname)//trim(user_timestring)//'.nc'
+           endif
+        else if (runtype == 'branch') then
+           ! this will only be valid for CESM - since a branch type is only valid for CESM
+           if (present(branch_fname)) then
+              fname = trim(branch_fname)
+           else
+              call extcde (60, msg="branch_fname optional argument must be present for branch runs ")
+           end if
+        end if
         inquire(file=trim(fname), exist=exists)
         if (exists) then
           if (restart_from_binary) then
