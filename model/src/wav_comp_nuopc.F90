@@ -989,7 +989,6 @@ contains
     !--------------------------------------------------------------------
 
     if (use_historync) then
-       write(6,*)'DEBUG: calling wav_history_init'
       call wav_history_init(stdout)
     end if
 
