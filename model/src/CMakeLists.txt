@@ -11,7 +11,9 @@ else()
   set(CMAKE_Fortran_COMPILER ${MPIFC})
   set(CMAKE_C_COMPILER ${MPICC})
 endif()
+message("LIBROOT is ${LIBROOT}")
 set(CMAKE_Fortran_FLAGS "${FFLAGS} ${CPPDEFS} -I${LIBROOT}/include -I${LIBROOT}/finclude -I${LIBROOT}/nuopc/esmf/${NINST_VALUE}/include")
+message("CMAKE_Fortran_FLAGS are ${CMAKE_FORTRAN_FLAGS}")
 
 #-------------------------
 # Set ESMF_F90COMPILEPATHS
@@ -129,8 +131,16 @@ set_property(SOURCE w3initmd.F90
 message("CMAKE_CURRENT_BINARY_DIR is ${CMAKE_CURRENT_BINARY_DIR}")
 message("PROJECT_BINARY_DIR is ${PROJECT_BINARY_DIR}")
 
-# Executables to always build
+# Build ww3_grid
 add_executable(ww3_grid ww3_grid.F90)
 target_link_libraries(ww3_grid PRIVATE wav)
+
+# Build ww3_bounc (need to first find NetCDF Fortran)
+execute_process(COMMAND nf-config --includedir OUTPUT_VARIABLE NETCDF_Fortran_INCLUDE_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
+execute_process(COMMAND nf-config --flibs OUTPUT_VARIABLE NETCDF_Fortran_LIBRARIES OUTPUT_STRIP_TRAILING_WHITESPACE)
+separate_arguments(NETCDF_Fortran_LIBRARIES)
+add_executable(ww3_bounc ww3_bounc.F90)
+target_link_libraries(ww3_bounc PRIVATE wav ${NETCDF_Fortran_LIBRARIES})
+target_include_directories(ww3_bounc PRIVATE ${NETCDF_Fortran_INCLUDE_DIR})
 
 install(TARGETS wav)
