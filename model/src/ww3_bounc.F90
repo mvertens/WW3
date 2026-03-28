@@ -204,7 +204,7 @@ PROGRAM W3BOUNC
   CHARACTER*512, ALLOCATABLE          :: SPECFILES(:)
   CHARACTER, ALLOCATABLE              :: STATION(:,:)
   !
-  LOGICAL                 :: FLGNML, SPCONV
+  LOGICAL                 :: FLGNML, SPCONV, FILE_EXISTS
   !
   !/
   !/ ------------------------------------------------------------------- /
@@ -449,10 +449,9 @@ PROGRAM W3BOUNC
     ALLOCATE(LATS(NBO2),LONS(NBO2),STATION(16,NBO2))
 
     DO IP=1,NBO2
-      ! open file
-      OPEN(NDSC,FILE=TRIM(SPECFILES(IP)),form='UNFORMATTED', convert=file_endian,      &
-           status='old',iostat=ICODE)
-      IF (ICODE.NE.0) THEN
+      ! check file exists
+      INQUIRE(FILE=TRIM(SPECFILES(IP)), EXIST=FILE_EXISTS)
+      IF (.NOT. FILE_EXISTS) THEN
         LONS(IP)=-999.
         LATS(IP)=-999.
         WRITE (NDSE,1010) TRIM(SPECFILES(IP))
