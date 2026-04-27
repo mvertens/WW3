@@ -1871,7 +1871,9 @@ CONTAINS
         ! Integral measure of wave steepness (Fedele & Tayfun, 2009) MU, as a
         ! function of the spectral width parameter NI (Longuet-Higgins, 1985)
         IF (ET1(JSEA) .GT. 1.E-7) THEN
-          NI(JSEA) = SQRT(ET(JSEA)*ET02(JSEA)/ET1(JSEA)**2 - 1)
+          ! Original line NI(JSEA) = SQRT(ET(JSEA)*ET02(JSEA)/ET1(JSEA)**2 - 1)
+          ! ABS addeed by Clio Dec 16 2025
+          NI(JSEA) = SQRT(ABS(ET(JSEA)*ET02(JSEA)/ET1(JSEA)**2 - 1))
         ENDIF
         IF (ET(JSEA) .GT. 1.E-7) THEN
           MU(JSEA) = ET1(JSEA)**2/GRAV * (ET(JSEA))**(-1.5) *          &
@@ -1882,7 +1884,11 @@ CONTAINS
         ! (normalized on the standard deviation = Hs/4)
         ! Time extremes
         IF ((STEX .EQ. 0) .AND. (STEY .EQ. 0)) THEN
-          MODE(JSEA) = SQRT(2.*LOG(NB(JSEA)))
+          ! Original line MODE(JSEA) = SQRT(2.*LOG(NB(JSEA)))
+          ! Changes Clio 14 Jan 2026
+          IF (NB(JSEA) .NE. UNDEF) THEN
+            MODE(JSEA) = SQRT(2.*LOG(NB(JSEA)))
+          END IF
           ! Space extremes (strictly for STEX*STEY >> WL02X*WL02Y)
         ELSEIF (STED .EQ. 0) THEN
           MODE(JSEA) = SQRT(2.*LOG(NS(JSEA))+LOG(2.*LOG(NS(JSEA))+     &
