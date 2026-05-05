@@ -420,40 +420,50 @@ then
   cd $path_build
   if [[ "$outopt" = "all" ]] || [[ "$outopt" = "grib" ]] ;
   then
-    cat $file_c | sed 's/DIST/SHRD/' | sed 's/MPI //'   | \
+    # SCRIPMPI must proceed MPI in both blocks
+    cat $file_c | sed 's/SCRIPMPI //'| \
+                  sed 's/DIST/SHRD/' | sed 's/MPI //'   | \
                   sed 's/OMPG //'    | sed 's/NOGRB/NCEP2/' | \
                   sed 's/OMPH //'    | sed 's/PDLIB //' | \
                   sed 's/B4B //'     | sed 's/METIS //' | \
-                  sed 's/SCOTCH //' > $path_build/switch
+                  sed 's/OASIS //'   | sed 's/OASACM //' | \
+                  sed 's/OASOCM //'  | sed 's/OASICM //' | \
+                  sed 's/COU //'  | \
+                  sed 's/SCOTCH //'  > $path_build/switch
   else
-    cat $file_c | sed 's/DIST/SHRD/' | sed 's/MPI //'   | \
+    cat $file_c | sed 's/SCRIPMPI //'| \
+                  sed 's/DIST/SHRD/' | sed 's/MPI //'   | \
                   sed 's/OMPG //'    | \
                   sed 's/OMPH //'    | sed 's/PDLIB //' | \
                   sed 's/B4B //'     | sed 's/METIS //' | \
-                  sed 's/SCOTCH //' >  $path_build/switch
+                  sed 's/OASIS //'   | sed 's/OASACM //' | \
+                  sed 's/OASOCM //'  | sed 's/OASICM //' | \
+                  sed 's/COU //'  | \
+                  sed 's/SCOTCH //'  > $path_build/switch
   fi
 
   echo "Switch file is $path_build/switch with switches:" >> $ofile
   cat $path_build/switch >> $ofile
-  cmake $path_cmake ${CMAKE_OPTIONS} -DSWITCH=$path_build/switch -DCMAKE_INSTALL_PREFIX=install > $ofile 2>&1
+  cmake $path_cmake ${CMAKE_OPTIONS} -DSWITCH=$path_build/switch -DCMAKE_INSTALL_PREFIX=install >> $ofile 2>&1
   rc=$?
-  if [[ $rc -ne 0 ]] ; then
+  if (( rc != 0 )); then
     echo "Fatal error in cmake."
-    echo "The build log is in $ofile"
-    exit
+    echo "The build log is in ${ofile}"
+    exit ${rc}
   fi
-  make -j 8 > $ofile 2>&1
+  make -j 8 VERBOSE=1 >> $ofile 2>&1
   rc=$?
-  if [[ $rc -ne 0 ]] ; then
+  if (( rc != 0 )); then
     echo "Fatal error in make."
-    echo "The build log is in $ofile"
-    exit
+    echo "The build log is in ${ofile}"
+    exit ${rc}
   fi
-  make install > $ofile 2>&1
-  if [[ $rc -ne 0 ]] ; then
+  make install >> $ofile 2>&1
+  rc=$?
+  if (( rc != 0 )); then
     echo "Fatal error in make install."
     echo "The build log is in $ofile"
-    exit
+    exit ${rc}
   fi
 
   cp $path_build/install/bin/* $path_e/
@@ -468,24 +478,26 @@ then
     \cp -f $file_c $path_build/switch
     echo "Switch file is $path_build/switch with switches:" >> $ofile
     cat $path_build/switch >> $ofile
-    cmake $path_cmake ${CMAKE_OPTIONS} -DSWITCH=$path_build/switch -DCMAKE_INSTALL_PREFIX=install > $ofile  2>&1
+    cmake $path_cmake ${CMAKE_OPTIONS} -DSWITCH=$path_build/switch -DCMAKE_INSTALL_PREFIX=install >> $ofile  2>&1
     rc=$?
-    if [[ $rc -ne 0 ]] ; then
+    if (( rc != 0 )); then
       echo "Fatal error in cmake."
-      echo "The build log is in $ofile"
-      exit
+      echo "The build log is in ${ofile}"
+      exit ${rc}
     fi
-    make -j 8 > $ofile 2>&1
-    if [[ $rc -ne 0 ]] ; then
+    make -j 8 VERBOSE=1 >> $ofile 2>&1
+    rc=$?
+    if (( rc != 0 )); then
       echo "Fatal error in make."
-      echo "The build log is in $ofile"
-      exit
+      echo "The build log is in ${ofile}"
+      exit ${rc}
     fi
-    make install > $ofile 2>&1
-    if [[ $rc -ne 0 ]] ; then
+    make install >> $ofile 2>&1
+    rc=$?
+    if (( rc != 0 )); then
       echo "Fatal error in make install."
       echo "The build log is in $ofile"
-      exit
+      exit ${rc}
     fi
     path_e=$path_w/exe
     cp $path_build/install/bin/ww3_shel $path_e/
@@ -507,24 +519,26 @@ else
   fi
   echo "Switch file is $path_build/switch with switches:" >> $ofile
   cat $path_build/switch >> $ofile
-  cmake $path_cmake ${CMAKE_OPTIONS} -DSWITCH=$path_build/switch -DCMAKE_INSTALL_PREFIX=install > $ofile 2>&1
+  cmake $path_cmake ${CMAKE_OPTIONS} -DSWITCH=$path_build/switch -DCMAKE_INSTALL_PREFIX=install >> $ofile 2>&1
   rc=$?
-  if [[ $rc -ne 0 ]] ; then
+  if (( rc != 0 )); then
     echo "Fatal error in cmake."
-    echo "The build log is in $ofile"
-    exit
+    echo "The build log is in ${ofile}"
+    exit ${rc}
   fi
-  make -j 8 > $ofile 2>&1
-  if [[ $rc -ne 0 ]] ; then
+  make -j 8 VERBOSE=1 >> $ofile 2>&1
+  rc=$?
+  if (( rc != 0 )); then
     echo "Fatal error in make."
-    echo "The build log is in $ofile"
-    exit
+    echo "The build log is in ${ofile}"
+    exit ${rc}
   fi
-  make install > $ofile 2>&1
-  if [[ $rc -ne 0 ]] ; then
-    echo "Fatal error in make install."
-    echo "The build log is in $ofile"
-    exit
+  make install >> $ofile 2>&1
+  rc=$?
+  if (( rc != 0 )); then
+    echo "Fatal error in make."
+    echo "The build log is in ${ofile}"
+    exit ${rc}
   fi
 
   cp $path_build/install/bin/* $path_e/
@@ -1350,6 +1364,16 @@ fi
     do
       cp $rmpnc .
       echo "copying $rmpnc to $path_w"
+    done
+  fi
+
+# copy pnt weight files from input to work directory 
+  pntwghtfile=`\ls $path_i/pnt_wght.*.nc 2>/dev/null`
+  if [ ! -z "$pntwghtfile" ]; then
+    for pntwghtnc in $pntwghtfile
+    do
+      cp $pntwghtnc .
+      echo "copying $pntwghtnc to $path_w"
     done
   fi
 

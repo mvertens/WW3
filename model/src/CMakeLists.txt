@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.19)
 project(wav Fortran)
 
 message("Using CIME in ${CIMEROOT} with compiler ${COMPILER}")
@@ -56,7 +56,6 @@ else()
   list(APPEND switches "OMPG"  "OMPH")
 endif()
 
-
 #-------------------------
 # Include list of src files to make file more readable
 # defines variables "ftn_src", "nuopc_mesh_cap_src", "pdlib_src", "scrip_src", and "scripnc_src"
@@ -64,20 +63,28 @@ endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/src_list.cmake)
 
 list(APPEND ftn_src ${nuopc_mesh_cap_src})
-
 list(APPEND ftn_src ${SRCROOT}/share/src/shr_pio_mod.F90)
 
 # Handle PDLIB, SCRIP, SCRIPNC build files directly instead of through configuration file
 if("PDLIB" IN_LIST switches)
   list(APPEND ftn_src ${pdlib_src})
   if("SCOTCH" IN_LIST switches)
-    #find_package(SCOTCH REQUIRED)
-    #target_link_libraries(ww3_lib PUBLIC PTSCOTCHparmetis::PTSCOTCHparmetis)
-  elseif("METIS" IN_LIST switches)
-    #find_package(ParMETIS REQUIRED)
-    #target_link_libraries(ww3_lib PUBLIC ParMETIS::ParMETIS)
+    find_package(SCOTCH REQUIRED)
+    target_sources(ww3_lib PRIVATE ${pdlib_src})
+    target_link_libraries(ww3_lib PUBLIC PTSCOTCHparmetis::PTSCOTCHparmetis)
+    if(SCOTCH_VERSION VERSION_GREATER "7.0.6")
+      list(APPEND compile_flags -DSCOTCH_707)
+      list(APPEND compile_flags_release -DSCOTCH_707)
+      list(APPEND compile_flags_debug -DSCOTCH_707)
+    else()
+      message(STATUS "SCOTCH version 7.06 or lower")
+    endif()
+  elseif("METIS"  IN_LIST switches)
+    find_package(ParMETIS REQUIRED)
+    target_sources(ww3_lib PRIVATE ${pdlib_src})
+    target_link_libraries(ww3_lib PUBLIC ParMETIS::ParMETIS)
   else()
-     message(FATAL_ERROR "PDLIB requires METIS or SCOTCH library for domain decomposition")
+    message(FATAL_ERROR "PDLIB requires METIS or SCOTCH library for domain decomposition")
   endif()
 endif()
 
