@@ -53,7 +53,7 @@ contains
   subroutine wav_pio_init(gcomp, mpi_comm, stdout, numprocs, rc)
 
 #ifdef CESMCOUPLED
-    use shr_pio_mod  , only : shr_pio_getiosys, shr_pio_getiotype, shr_pio_getioformat
+    use shr_pio_mod, only : shr_pio_getiosys, shr_pio_getiotype, shr_pio_getioformat
     use wav_shr_mod  , only : inst_name
 #endif
     use ESMF         , only : ESMF_GridComp, ESMF_UtilStringUpperCase, ESMF_VM, ESMF_FAILURE

@@ -190,6 +190,7 @@ MODULE W3ADATMD
   !      MSCD      R.A.  Public   Direction of MSCX
   !      QP        R.A.  Public   Goda peakedness parameter.
   !      QKK       R.A.  Public   Spectral bandwidth (De Carlo et al. 2023)
+  !      SKEW      R.A.  Public   skewness lambda_3,0,0 (Srokosz 1986)
   !
   !      DTDYN     R.A.  Public   Mean dynamic time step (raw).
   !      FCUT      R.A.  Public   Cut-off frequency for tail.
@@ -360,6 +361,9 @@ MODULE W3ADATMD
   !/ ------------------------------------------------------------------- /
 
   use w3servmd, only : print_memcheck
+#ifdef W3_MPI
+  use mpi_f08, only  : MPI_COMM, MPI_Request, MPI_Datatype
+#endif
 
   ! module default
   implicit none
@@ -478,9 +482,10 @@ MODULE W3ADATMD
     ! Output fields group 8)
     !
     REAL, POINTER         ::  MSSX(:),  MSSY(:),  MSSD(:),        &
-         MSCX(:),  MSCY(:),  MSCD(:), QKK(:)
+         MSCX(:),  MSCY(:),  MSCD(:), QKK(:), SKEW(:), EMBIA1(:), EMBIA2(:)
     REAL, POINTER         ::  XMSSX(:), XMSSY(:), XMSSD(:),       &
-         XMSCX(:), XMSCY(:), XMSCD(:), XQKK(:)
+         XMSCX(:), XMSCY(:), XMSCD(:), XQKK(:),                   &
+         XSKEW(:), XEMBIA1(:), XEMBIA2(:)
     !
     ! Output fields group 9)
     !
@@ -548,9 +553,9 @@ MODULE W3ADATMD
     !
     INTEGER, POINTER      :: IAPPRO(:)
 #ifdef W3_MPI
-    INTEGER               :: MPI_COMM_WAVE, MPI_COMM_WCMP,        &
-         WW3_FIELD_VEC, WW3_SPEC_VEC,         &
-         NRQSG1 = 0, NRQSG2, IBFLOC, ISPLOC,  &
+    type(MPI_COMM)        :: MPI_COMM_WAVE, MPI_COMM_WCMP
+    type(MPI_Datatype)    :: WW3_FIELD_VEC, WW3_SPEC_VEC
+    INTEGER               :: NRQSG1 = 0, NRQSG2, IBFLOC, ISPLOC,  &
          NSPLOC
 #endif
 #ifdef W3_PDLIB
@@ -558,12 +563,12 @@ MODULE W3ADATMD
 #endif
 #ifdef W3_MPI
     INTEGER               :: BSTAT(MPIBUF), BISPL(MPIBUF)
-    INTEGER, POINTER      :: IRQSG1(:,:), IRQSG2(:,:)
+    type(MPI_Request), POINTER :: IRQSG1(:,:), IRQSG2(:,:)
     REAL, POINTER         :: GSTORE(:,:), SSTORE(:,:)
 #endif
     REAL, POINTER         :: SPPNT(:,:,:)
     !
-    INTEGER               :: ITIME, IPASS, IDLAST, NSEALM
+    INTEGER               :: ITIME, IPASS, IDLAST, NSEALM, ITSTEP
     REAL, POINTER         :: ALPHA(:,:)
     LOGICAL               :: AINIT, AINIT2, FL_ALL, FLCOLD, FLIWND
     !
@@ -620,7 +625,7 @@ MODULE W3ADATMD
        BEDFORMS(:,:), PHIBBL(:), TAUBBL(:,:)
   !
   REAL, POINTER           :: MSSX(:), MSSY(:), MSSD(:),           &
-       MSCX(:), MSCY(:), MSCD(:), QKK(:)
+       MSCX(:), MSCY(:), MSCD(:), QKK(:), SKEW(:), EMBIA1(:), EMBIA2(:)
   !
   REAL, POINTER           :: DTDYN(:), FCUT(:), CFLXYMAX(:),      &
        CFLTHMAX(:), CFLKMAX(:)
@@ -678,17 +683,16 @@ MODULE W3ADATMD
   !
   INTEGER, POINTER        :: IAPPRO(:)
 #ifdef W3_MPI
-  INTEGER, POINTER        :: MPI_COMM_WAVE, MPI_COMM_WCMP,        &
-       WW3_FIELD_VEC, WW3_SPEC_VEC,         &
-       NRQSG1, NRQSG2, IBFLOC, ISPLOC,      &
-       NSPLOC
+  type(MPI_COMM), POINTER :: MPI_COMM_WAVE, MPI_COMM_WCMP
+  type(MPI_Datatype), POINTER :: WW3_FIELD_VEC, WW3_SPEC_VEC
+  INTEGER, POINTER        :: NRQSG1, NRQSG2, IBFLOC, ISPLOC, NSPLOC
   INTEGER, POINTER        :: BSTAT(:), BISPL(:)
-  INTEGER, POINTER        :: IRQSG1(:,:), IRQSG2(:,:)
+  type(MPI_Request), POINTER :: IRQSG1(:,:), IRQSG2(:,:)
   REAL, POINTER           :: GSTORE(:,:), SSTORE(:,:)
 #endif
   REAL, POINTER           :: SPPNT(:,:,:)
   !
-  INTEGER, POINTER        :: ITIME, IPASS, IDLAST, NSEALM
+  INTEGER, POINTER        :: ITIME, IPASS, IDLAST, NSEALM, ITSTEP
   REAL, POINTER           :: ALPHA(:,:)
   LOGICAL, POINTER        :: AINIT, AINIT2, FL_ALL, FLCOLD, FLIWND
   !/
@@ -760,7 +764,6 @@ CONTAINS
     !/ ------------------------------------------------------------------- /
     USE W3GDATMD, ONLY: NGRIDS
     USE W3SERVMD, ONLY: EXTCDE
-    USE W3ODATMD, ONLY: IAPROC
 #ifdef W3_S
     USE W3SERVMD, ONLY: STRACE
 #endif
@@ -803,6 +806,7 @@ CONTAINS
       WADATS(I)%IPASS  = 0
       WADATS(I)%IDLAST = 0
       WADATS(I)%NSEALM = 0
+      WADATS(I)%ITSTEP = 0
       WADATS(I)%FLCOLD = .FALSE.
       WADATS(I)%FLIWND = .FALSE.
       WADATS(I)%AINIT  = .FALSE.
@@ -928,16 +932,15 @@ CONTAINS
     !
     !/ ------------------------------------------------------------------- /
     USE CONSTANTS, ONLY : LPDLIB
-    USE W3GDATMD, ONLY: NGRIDS, IGRID, W3SETG, NK, NX, NY, NSEA,    &
-         NSEAL, NSPEC, NTH, E3DF, P2MSF, US3DF,      &
-         USSPF, GTYPE, UNGTYPE
-    USE W3ODATMD, ONLY: IAPROC, NAPROC, NTPROC, NAPFLD,             &
-         NOSWLL, NOEXTR, UNDEF, FLOGRD, FLOGR2
+    USE W3GDATMD, ONLY: NGRIDS, IGRID, W3SETG, NK, NX, NY, NSEA,        &
+         NSEAL, NSPEC, NTH, E3DF, P2MSF, US3DF, USSPF, GTYPE, UNGTYPE
+    USE W3ODATMD, ONLY: IAPROC, NAPROC, NOSWLL, NOEXTR, UNDEF
     USE W3IDATMD, ONLY: FLCUR, FLWIND, FLTAUA, FLRHOA
     USE W3SERVMD, ONLY: EXTCDE
 #ifdef W3_S
     USE W3SERVMD, ONLY: STRACE
 #endif
+    use w3odatmd, only : use_cmeps
     !
     !/
     !/ ------------------------------------------------------------------- /
@@ -949,12 +952,13 @@ CONTAINS
     !/ ------------------------------------------------------------------- /
     !/ Local parameters
     !/
-    INTEGER                 :: JGRID, NXXX, NSEAL_tmp
+    INTEGER       :: JGRID, NXXX
+    integer       :: memunit
+    integer       :: allocsize
 #ifdef W3_S
-    INTEGER, SAVE           :: IENT = 0
+    INTEGER, SAVE :: IENT = 0
     CALL STRACE (IENT, 'W3DIMA')
 #endif
-    integer :: memunit
     !
     ! -------------------------------------------------------------------- /
     ! 1.  Test input and module status
@@ -1277,7 +1281,9 @@ CONTAINS
     ALLOCATE ( WADATS(IMOD)%MSSX(NSEALM), WADATS(IMOD)%MSSY(NSEALM), &
          WADATS(IMOD)%MSCX(NSEALM), WADATS(IMOD)%MSCY(NSEALM), &
          WADATS(IMOD)%MSSD(NSEALM), WADATS(IMOD)%MSCD(NSEALM), &
-         WADATS(IMOD)%QKK(NSEALM), STAT=ISTAT )
+         WADATS(IMOD)%QKK(NSEALM), WADATS(IMOD)%SKEW(NSEALM),  &
+         WADATS(IMOD)%EMBIA1(NSEALM), WADATS(IMOD)%EMBIA2(NSEALM),  &
+              STAT=ISTAT )
     CHECK_ALLOC_STATUS ( ISTAT )
     !
     WADATS(IMOD)%MSSX   = UNDEF
@@ -1287,6 +1293,9 @@ CONTAINS
     WADATS(IMOD)%MSCY   = UNDEF
     WADATS(IMOD)%MSCD   = UNDEF
     WADATS(IMOD)%QKK    = UNDEF
+    WADATS(IMOD)%SKEW   = UNDEF
+    WADATS(IMOD)%EMBIA1 = UNDEF
+    WADATS(IMOD)%EMBIA2 = UNDEF
     call print_memcheck(memunit, 'memcheck_____:'//' W3DIMA 8')
     !
     ! 9) Numerical diagnostics
@@ -1334,40 +1343,44 @@ CONTAINS
       ALLOCATE (WADATS(IMOD)%IC3CG(0:NK+1,0:300), STAT=ISTAT )
       CHECK_ALLOC_STATUS ( ISTAT )
 #endif
-
+      if (use_cmeps) then
+         allocsize = 1
+      else
+         allocsize = nsea
+      end if
       !
       IF ( FLCUR  ) THEN
-        ALLOCATE ( WADATS(IMOD)%CA0(NSEA) , &
-             WADATS(IMOD)%CAI(NSEA) ,       &
-             WADATS(IMOD)%CD0(NSEA) ,       &
-             WADATS(IMOD)%CDI(NSEA) ,       &
+        ALLOCATE ( WADATS(IMOD)%CA0(allocsize) , &
+             WADATS(IMOD)%CAI(allocsize) ,       &
+             WADATS(IMOD)%CD0(allocsize) ,       &
+             WADATS(IMOD)%CDI(allocsize) ,       &
              STAT=ISTAT )
         CHECK_ALLOC_STATUS ( ISTAT )
       END IF
       !
       IF ( FLWIND ) THEN
-        ALLOCATE ( WADATS(IMOD)%UA0(NSEA) , &
-             WADATS(IMOD)%UAI(NSEA) ,       &
-             WADATS(IMOD)%UD0(NSEA) ,       &
-             WADATS(IMOD)%UDI(NSEA) ,       &
-             WADATS(IMOD)%AS0(NSEA) ,       &
-             WADATS(IMOD)%ASI(NSEA) ,       &
+        ALLOCATE ( WADATS(IMOD)%UA0(allocsize) , &
+             WADATS(IMOD)%UAI(allocsize) ,       &
+             WADATS(IMOD)%UD0(allocsize) ,       &
+             WADATS(IMOD)%UDI(allocsize) ,       &
+             WADATS(IMOD)%AS0(allocsize) ,       &
+             WADATS(IMOD)%ASI(allocsize) ,       &
              STAT=ISTAT )
         CHECK_ALLOC_STATUS ( ISTAT )
       END IF
       !
       IF ( FLTAUA  ) THEN
-        ALLOCATE ( WADATS(IMOD)%MA0(NSEA) , &
-             WADATS(IMOD)%MAI(NSEA) ,       &
-             WADATS(IMOD)%MD0(NSEA) ,       &
-             WADATS(IMOD)%MDI(NSEA) ,       &
+        ALLOCATE ( WADATS(IMOD)%MA0(allocsize) , &
+             WADATS(IMOD)%MAI(allocsize) ,       &
+             WADATS(IMOD)%MD0(allocsize) ,       &
+             WADATS(IMOD)%MDI(allocsize) ,       &
              STAT=ISTAT )
         CHECK_ALLOC_STATUS ( ISTAT )
       END IF
       !
       IF ( FLRHOA  ) THEN
-        ALLOCATE ( WADATS(IMOD)%RA0(NSEA) , &
-             WADATS(IMOD)%RAI(NSEA) ,       &
+        ALLOCATE ( WADATS(IMOD)%RA0(allocsize) , &
+             WADATS(IMOD)%RAI(allocsize) ,       &
              STAT=ISTAT )
         CHECK_ALLOC_STATUS ( ISTAT )
       END IF
@@ -1545,12 +1558,8 @@ CONTAINS
     ! 10. Source code :
     !
     !/ ------------------------------------------------------------------- /
-    USE W3GDATMD, ONLY: NGRIDS, IGRID, W3SETG, NK, NX, NY, NSEA,    &
-         NSEAL, NSPEC, NTH, E3DF, P2MSF, US3DF,      &
-         USSPF, GTYPE, UNGTYPE
-    USE W3ODATMD, ONLY: IAPROC, NAPROC, NTPROC, NAPFLD,             &
-         NOSWLL, NOEXTR, UNDEF, FLOGRD, FLOGR2,      &
-         NOGRP, NGRPP
+    USE W3GDATMD, ONLY: NGRIDS, IGRID, W3SETG, NK, E3DF, P2MSF, UNGTYPE
+    USE W3ODATMD, ONLY: IAPROC, NAPROC, NOSWLL, NOEXTR, UNDEF, NOGRP, NGRPP
     USE W3SERVMD, ONLY: EXTCDE
 #ifdef W3_S
     USE W3SERVMD, ONLY: STRACE
@@ -1567,11 +1576,11 @@ CONTAINS
     !/ Local parameters
     !/
     INTEGER                 :: JGRID, NXXX, I
+    integer :: memunit
 #ifdef W3_S
     INTEGER, SAVE           :: IENT = 0
     CALL STRACE (IENT, 'W3XDMA')
 #endif
-    integer :: memunit
     !
     ! -------------------------------------------------------------------- /
     ! 1.  Test input and module status
@@ -2306,6 +2315,24 @@ CONTAINS
       ALLOCATE ( WADATS(IMOD)%XQKK(1) )
     END IF
     !
+    IF ( OUTFLAGS( 8,  7) ) THEN
+      ALLOCATE ( WADATS(IMOD)%XSKEW(NXXX) )
+    ELSE
+      ALLOCATE ( WADATS(IMOD)%XSKEW(1) )
+    END IF
+    !
+    IF ( OUTFLAGS( 8,  8) ) THEN
+      ALLOCATE ( WADATS(IMOD)%XEMBIA1(NXXX) )
+    ELSE
+      ALLOCATE ( WADATS(IMOD)%XEMBIA1(1) )
+    END IF
+    !
+    IF ( OUTFLAGS( 8,  9) ) THEN
+      ALLOCATE ( WADATS(IMOD)%XEMBIA2(NXXX) )
+    ELSE
+      ALLOCATE ( WADATS(IMOD)%XEMBIA2(1) )
+    END IF
+    !
     WADATS(IMOD)%XMSSX   = UNDEF
     WADATS(IMOD)%XMSSY   = UNDEF
     WADATS(IMOD)%XMSSD   = UNDEF
@@ -2314,6 +2341,9 @@ CONTAINS
     WADATS(IMOD)%XMSCD   = UNDEF
     WADATS(IMOD)%XQP(1)  = UNDEF
     WADATS(IMOD)%XQKK    = UNDEF
+    WADATS(IMOD)%XSKEW   = UNDEF
+    WADATS(IMOD)%XEMBIA1 = UNDEF
+    WADATS(IMOD)%XEMBIA2 = UNDEF
     !
     IF ( OUTFLAGS( 9, 1) ) THEN
       ALLOCATE ( WADATS(IMOD)%XDTDYN(NXXX), STAT=ISTAT )
@@ -2489,9 +2519,7 @@ CONTAINS
     ! 10. Source code :
     !
     !/ ------------------------------------------------------------------- /
-    USE W3GDATMD, ONLY: NGRIDS, IGRID, NK, NX, NY, NSEA, NSEAL,     &
-         NSPEC, NTH, GTYPE, UNGTYPE
-    USE W3ODATMD, ONLY: NAPROC
+    USE W3GDATMD, ONLY: NGRIDS, UNGTYPE
     USE W3SERVMD, ONLY: EXTCDE
 #ifdef W3_S
     USE W3SERVMD, ONLY: STRACE
@@ -2705,7 +2733,7 @@ CONTAINS
     !/ ------------------------------------------------------------------- /
     !
     USE W3IDATMD, ONLY: INPUTS
-    USE W3GDATMD, ONLY: E3DF, P2MSF, US3DF, USSPF, GTYPE, UNGTYPE
+    USE W3GDATMD, ONLY: GTYPE, UNGTYPE
     !
     USE W3SERVMD, ONLY: EXTCDE
 #ifdef W3_S
@@ -2755,6 +2783,7 @@ CONTAINS
     IPASS  => WADATS(IMOD)%IPASS
     IDLAST => WADATS(IMOD)%IDLAST
     NSEALM => WADATS(IMOD)%NSEALM
+    ITSTEP => WADATS(IMOD)%ITSTEP
     FLCOLD => WADATS(IMOD)%FLCOLD
     FLIWND => WADATS(IMOD)%FLIWND
     AINIT  => WADATS(IMOD)%AINIT
@@ -2928,6 +2957,9 @@ CONTAINS
       MSCY   => WADATS(IMOD)%MSCY
       MSCD   => WADATS(IMOD)%MSCD
       QKK    => WADATS(IMOD)%QKK
+      SKEW   => WADATS(IMOD)%SKEW
+      EMBIA1  => WADATS(IMOD)%EMBIA1
+      EMBIA2  => WADATS(IMOD)%EMBIA2
       !
       DTDYN    => WADATS(IMOD)%DTDYN
       FCUT     => WADATS(IMOD)%FCUT
@@ -3131,8 +3163,7 @@ CONTAINS
     !
     !/ ------------------------------------------------------------------- /
     !
-    USE W3IDATMD, ONLY: INPUTS
-    USE W3GDATMD, ONLY: E3DF, P2MSF, US3DF, USSPF, GTYPE, UNGTYPE
+    USE W3GDATMD, ONLY: UNGTYPE
     !
     USE W3SERVMD, ONLY: EXTCDE
 #ifdef W3_S
@@ -3269,6 +3300,9 @@ CONTAINS
       MSCY   => WADATS(IMOD)%XMSCY
       MSCD   => WADATS(IMOD)%XMSCD
       QKK    => WADATS(IMOD)%XQKK
+      SKEW   => WADATS(IMOD)%XSKEW
+      EMBIA1 => WADATS(IMOD)%XEMBIA1
+      EMBIA2 => WADATS(IMOD)%XEMBIA2
       !
       DTDYN    => WADATS(IMOD)%XDTDYN
       FCUT     => WADATS(IMOD)%XFCUT

@@ -1,136 +1,89 @@
-cmake_minimum_required(VERSION 3.12)
-project(wav Fortran)
+# CMake build written by Kyle Gerheiser
 
-message("Using CIME in ${CIMEROOT} with compiler ${COMPILER}")
+# Requires CMake 3.19 for JSON strings
+cmake_minimum_required(VERSION 3.19)
 
-include(${CASEROOT}/Macros.cmake)
-if (MPILIB STREQUAL mpi-serial)
-  set(CMAKE_Fortran_COMPILER ${SFC})
-  set(CMAKE_C_COMPILER ${SCC})
-else()
-  set(CMAKE_Fortran_COMPILER ${MPIFC})
-  set(CMAKE_C_COMPILER ${MPICC})
-endif()
-set(CMAKE_Fortran_FLAGS "${FFLAGS} ${CPPDEFS} -I${LIBROOT}/include -I${LIBROOT}/finclude -I${LIBROOT}/nuopc/esmf/${NINST_VALUE}/include")
+# Get VERSION from VERSION file
+file(STRINGS "VERSION" pVersion)
 
-#-------------------------
-# Set ESMF_F90COMPILEPATHS
-#-------------------------
-# convert esmf.mk makefile variables to cmake variables until ESMF
-# provides proper cmake package
-if (DEFINED ENV{ESMFMKFILE})
-  message("ESMFMKFILE:   $ENV{ESMFMKFILE}")
-else()
-  message(FATAL_ERROR "ESMFMKFILE env variable is not defined")
-endif()
-set(ESMFMKFILE $ENV{ESMFMKFILE})
-file(STRINGS ${ESMFMKFILE} esmf_mk_text)
-foreach(line ${esmf_mk_text})
-  string(REGEX REPLACE "^[ ]+" "" line ${line}) # strip leading spaces
-  if (line MATCHES "^ESMF_*")                   # process only line starting with ESMF_
-    string(REGEX MATCH "^ESMF_[^=]+" esmf_name ${line})
-    string(REPLACE "${esmf_name}=" "" emsf_value ${line})
-    set(${esmf_name} "${emsf_value}")
-  endif()
-endforeach()
-string(REPLACE "-I" "" ESMF_F90COMPILEPATHS ${ESMF_F90COMPILEPATHS})
-string(REPLACE " " ";" ESMF_F90COMPILEPATHS ${ESMF_F90COMPILEPATHS})
-message("ESMF_F90COMPILEPATHS:   ${ESMF_F90COMPILEPATHS}")
+project(
+  WW3
+  VERSION ${pVersion}
+  LANGUAGES C Fortran)
 
-#-------------------------
-# Determine switches
-#-------------------------
-list(APPEND switches "CESMCOUPLED" "DIST" "MPI" "FLX0" "SEED" "ST4" "STAB0" "NL1" "BT1" "DB1" "MLIM" "FLD2" "TR0" "BS0" "RWND" "WNX1" "WNT1" "CRX1" "CRT1" "O0" "O1" "O2" "O3" "O4" "O5" "O6" "O7" "O14" "O15" "IS0" "REF0" "NOGRB" "IC4" "NCO")
-
-if (DEFINED USE_PR3)
-  list(APPEND switches PR3 UQ)
-elseif (DEFINED USE_PR1)
-  list(APPEND switches PR1)
-else()
-  message(FATAL_ERROR "either USE_PR3 or USE_PR1 must be defined")
-endif()
-
-if (DEFINED USE_UNSTRUCT)
-  list(APPEND switches "PDLIB" "METIS")
-else()
-  list(APPEND switches "OMPG"  "OMPH")
-endif()
-
-
-#-------------------------
-# Include list of src files to make file more readable
-# defines variables "ftn_src", "nuopc_mesh_cap_src", "pdlib_src", "scrip_src", and "scripnc_src"
-#-------------------------
-include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/src_list.cmake)
-
-list(APPEND ftn_src ${nuopc_mesh_cap_src})
-
-list(APPEND ftn_src ${SRCROOT}/share/src/shr_pio_mod.F90)
-
-# Handle PDLIB, SCRIP, SCRIPNC build files directly instead of through configuration file
-if("PDLIB" IN_LIST switches)
-  list(APPEND ftn_src ${pdlib_src})
-  if("SCOTCH" IN_LIST switches)
-    #find_package(SCOTCH REQUIRED)
-    #target_link_libraries(ww3_lib PUBLIC PTSCOTCHparmetis::PTSCOTCHparmetis)
-  elseif("METIS" IN_LIST switches)
-    #find_package(ParMETIS REQUIRED)
-    #target_link_libraries(ww3_lib PUBLIC ParMETIS::ParMETIS)
+get_directory_property(hasParent PARENT_DIRECTORY)
+if(hasParent)
+  # Unset flags that come from Parent (ie UFS or other coupled build)
+  # for potential (-r8/-r4) conflict
+  set(CMAKE_Fortran_FLAGS "")
+  if(CMAKE_Fortran_COMPILER_ID MATCHES "^(Intel)$")
+    set(CMAKE_Fortran_FLAGS_DEBUG "-check all -check noarg_temp_created -ftrapuv")
+  elseif(CMAKE_Fortran_COMPILER_ID MATCHES "^(IntelLLVM)$")
+    set(CMAKE_Fortran_FLAGS_DEBUG "-check all -check noarg_temp_created -ftrapuv")
   else()
-     message(FATAL_ERROR "PDLIB requires METIS or SCOTCH library for domain decomposition")
+    message(WARNING "Fortran compiler with ID ${CMAKE_Fortran_COMPILER_ID} will be used with CMake default options")
+  endif()
+  set(CMAKE_C_FLAGS "")
+  remove_definitions(-DDEBUG)
+endif()
+
+set(valid_caps "MULTI_ESMF" "NUOPC_MESH")
+
+set(UFS_CAP "" CACHE STRING "Valid options are ${valid_caps}")
+set(NETCDF ON CACHE BOOL "Build NetCDF programs (requires NetCDF)")
+set(ENDIAN "BIG" CACHE STRING "Endianness of unformatted output files. Valid values are 'BIG', 'LITTLE', 'NATIVE'.")
+set(EXCLUDE_FIND "" CACHE STRING "Don't try and search for these libraries (assumd to be handled by the compiler/wrapper)")
+set(ENABLE_DOCS OFF CACHE BOOL "Enable building of doxygen generated documentation")
+
+# make sure all "exclude_find" entries are lower case
+list(TRANSFORM EXCLUDE_FIND TOLOWER)
+
+# Make Find modules visible to CMake
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+# Set switch file on command line when running CMake
+set(SWITCH "" CACHE STRING "Switch file, either full path, relative path from location of top-level WW3/ dir, or a switch in model/bin")
+
+# Search for switch file as a full path or in model/bin
+if(EXISTS ${SWITCH})
+  set(switch_file ${SWITCH})
+else()
+  set(switch_file ${CMAKE_CURRENT_SOURCE_DIR}/model/bin/switch_${SWITCH})
+  if(NOT EXISTS ${switch_file})
+    message(FATAL_ERROR "Switch file '${switch_file}' does not exist, set switch with -DSWITCH=<switch>")
   endif()
 endif()
 
-#-------------------------
-# Determine switch specific files
-# Include check_switches as a function for less verbosity in this CMakeLists.txt
-#-------------------------
-message(STATUS "switches are : ${switches}")
-include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_switches.cmake)
-check_switches("${switches}" switch_files)
-
-message(STATUS "---")
-message(STATUS "list of always source files is : ${ftn_src}")
-message(STATUS "list of switch files is : ${switch_files}")
-message(STATUS "---")
-
-#-------------------------
-# Now check in SourceMods to see if the file should be used instead
-#-------------------------
-list(APPEND srcfiles ${ftn_src} ${switch_files})
-foreach(file ${srcfiles} )
-  if(EXISTS "${CASEROOT}/SourceMods/src.ww3/${file}")
-    message("Using ${file} from ${CASEROOT}/SourceMods/src.ww3")
-    list(REMOVE_ITEM srcfiles ${file})
-    list(APPEND srcfiles "${CASEROOT}/SourceMods/src.ww3/${file}")
-    message(STATUS "Using ${file} from ${CASEROOT}/SourceMods/src.ww3")
+if(UFS_CAP)
+  if(NOT UFS_CAP IN_LIST valid_caps)
+    message(FATAL_ERROR "Invalid UFS_CAP selection. Valids options are ${valid_caps}")
   endif()
-endforeach()
+endif()
 
-#-------------------------
-# Determine target library wav
-#-------------------------
-add_library(wav ${srcfiles})
-target_include_directories (wav PRIVATE ${ESMF_F90COMPILEPATHS})
+message(STATUS "Build with switch: ${switch_file}")
+# Copy switch file to build dir
+configure_file(${switch_file} ${CMAKE_BINARY_DIR}/switch COPYONLY)
 
-#-------------------------
-# Determine compile definitions for wav
-#-------------------------
-foreach(switch ${switches})
-  target_compile_definitions(wav PUBLIC W3_${switch})
-endforeach()
-add_compile_definitions(ENDIANNESS="big_endian")
-set_property(SOURCE w3initmd.F90
-  APPEND
-  PROPERTY COMPILE_DEFINITIONS
-  "__WW3_SWITCHES__=\'\'"
-  )
+# Re-configure CMake when switch changes
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_BINARY_DIR}/switch)
 
-message("CMAKE_CURRENT_BINARY_DIR is ${CMAKE_CURRENT_BINARY_DIR}")
-message("PROJECT_BINARY_DIR is ${PROJECT_BINARY_DIR}")
+if(NOT CMAKE_BUILD_TYPE MATCHES "^(Debug|Release|RelWithDebInfo|MinSizeRel)$")
+  message(STATUS "Setting build type to 'Release' as none was specified.")
+  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type" FORCE)
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+endif()
 
-# Executables to always build
-add_executable(ww3_grid ww3_grid.F90)
-target_link_libraries(ww3_grid PRIVATE wav)
+add_subdirectory(model)
 
-install(TARGETS wav)
+# Turn on doxygen documentation
+if (ENABLE_DOCS)
+  list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/docs/cmake")
+  include(EnableDoxygen)
+  add_subdirectory(docs)
+endif()
+
+# Turn on unit testing.
+#include(CTest)
+#if(BUILD_TESTING)
+#  add_subdirectory(regtests/unittests)
+#endif()
