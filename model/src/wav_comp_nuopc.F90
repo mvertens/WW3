@@ -87,20 +87,19 @@ module wav_comp_nuopc
   logical :: cesmcoupled = .false.                         !< logical to indicate non-CESM use case
   type(is_restart_fh_type)     :: restartfh_info           ! For flexible restarts in UFS
 #endif
-  integer, allocatable :: tend(:,:)                        !< the ending time of ModelAdvance when
-
-  character(len=256)  :: history_option = 'never'          !< History option units
-  integer             :: history_n = 1                     !< Number until history interval
-  integer             :: history_ymd = -999                !< History date (YYYYMMDD)
-  logical             :: aux_flds_to_cmeps                 !< Send auxiliary time averaged fields to CMEPS
-
-                                                           !! run with multigrid=true
+  integer :: stdout                                        !< the log file on the root_task, otherwise unit=6
   integer :: ymd                                           !< current year-month-day
   integer :: tod                                           !< current time of day (sec)
   integer :: time0(2)                                      !< start time stored as yyyymmdd,hhmmss
   integer :: timen(2)                                      !< end time stored as yyyymmdd,hhmmss
   integer :: nu_timer                                      !< simple timer log, unused except by UFS
   logical :: runtimelog = .false.                          !< logical flag for writing runtime log files
+  !
+  character(len=256)  :: history_option = 'never'          !< History option units
+  integer             :: history_n = 1                     !< Number until history interval
+  integer             :: history_ymd = -999                !< History date (YYYYMMDD)
+  logical             :: aux_flds_to_cmeps                 !< Send auxiliary time averaged fields to CMEPS
+
   character(*), parameter :: modName =  "(wav_comp_nuopc)" !< the name of this module
   character(*), parameter :: u_FILE_u = &                  !< a character string for an ESMF log message
        __FILE__
@@ -275,7 +274,6 @@ contains
     type(ESMF_Info)             :: info
     type(ESMF_VM)               :: vm
     integer                     :: shrlogunit
-    integer                     :: stdout
     integer                     :: yy,mm,dd,hh,ss
     integer                     :: start_ymd         ! start date (yyyymmdd)
     integer                     :: start_tod         ! start time of day (sec)
