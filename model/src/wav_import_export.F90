@@ -408,9 +408,8 @@ contains
     use w3wdatmd    , only: w3setw
 #ifdef W3_CESMCOUPLED
     use w3idatmd    , only: HSL
-#else
-    use wav_shr_mod , only : casename
 #endif
+    use wav_shr_mod , only : casename
 
     ! input/output variables
     type(ESMF_GridComp) , intent(inout) :: gcomp
@@ -682,7 +681,7 @@ contains
     !---------------------------------------------------------------------------
 
     use wav_kind_mod,   only : R8 => SHR_KIND_R8
-    use w3adatmd      , only : USSX, USSY, USSP,
+    use w3adatmd      , only : USSX, USSY, USSP
     use w3adatmd      , only : HS, THM, FP0, THP0, TAUICE, TUSX, TUSY, PHIOC, PHIAW
     use w3adatmd      , only : PHS, PDIR, T01, PT1, charn, T02
     use w3adatmd      , only : tauox, tauoy, wnmean, taubbl
@@ -721,21 +720,6 @@ contains
 #ifdef W3_CESMCOUPLED
     real(r8), pointer :: sw_lamult(:)
     real(r8), pointer :: sw_lasl(:)
-#endif
-    real(r8), pointer :: sw_ustokes(:)
-    real(r8), pointer :: sw_vstokes(:)
-
-    real(r8), pointer :: sxxn(:)
-    real(r8), pointer :: sxyn(:)
-    real(r8), pointer :: syyn(:)
-
-    real(r8), pointer :: sw_lamult(:)
-   !real(r8), pointer :: sw_lasl(:)
-    real(r8), pointer :: sw_ustokes(:)
-    real(r8), pointer :: sw_vstokes(:)
-    real(r8), pointer :: sw_hstokes(:)
-
-#ifndef W3_CESMCOUPLED
     real(r8), pointer :: sw_hs(:)
     real(r8), pointer :: sw_bhd(:)
     real(r8), pointer :: sw_tauox(:)
@@ -748,6 +732,13 @@ contains
     real(r8), pointer :: sw_t0m1(:)
     real(r8), pointer :: sw_wnmean(:)
 #endif
+    real(r8), pointer :: sw_ustokes(:)
+    real(r8), pointer :: sw_vstokes(:)
+    real(r8), pointer :: sw_hstokes(:)
+
+    real(r8), pointer :: sxxn(:)
+    real(r8), pointer :: sxyn(:)
+    real(r8), pointer :: syyn(:)
 
     real(r8), pointer :: sa_u(:)
     real(r8), pointer :: sa_v(:)

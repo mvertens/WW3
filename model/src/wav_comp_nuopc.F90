@@ -47,7 +47,7 @@ module wav_comp_nuopc
   use w3odatmd              , only : runtype, user_histfname, user_restfname, verboselog
   use w3odatmd              , only : use_historync, use_restartnc, restart_from_binary, logfile_is_assigned
   use w3odatmd              , only : time_origin, calendar_name, elapsed_secs
-  use wav_shr_mod           , only : casename, multigrid, inst_suffix, inst_index, inst_name, unstr_mesh
+  use wav_shr_mod           , only : casename, inst_suffix, inst_index, inst_name, unstr_mesh
   use wav_wrapper_mod       , only : ufs_settimer, ufs_logtimer, ufs_file_setlogunit, wtime
 #ifndef W3_CESMCOUPLED
   use shr_is_restart_fh_mod , only : init_is_restart_fh, is_restart_fh, is_restart_fh_type
@@ -275,6 +275,7 @@ contains
     type(ESMF_Info)             :: info
     type(ESMF_VM)               :: vm
     integer                     :: shrlogunit
+    integer                     :: stdout
     integer                     :: yy,mm,dd,hh,ss
     integer                     :: start_ymd         ! start date (yyyymmdd)
     integer                     :: start_tod         ! start time of day (sec)
@@ -1520,7 +1521,6 @@ contains
     ! local variables
     integer           :: ierr
     integer           :: unitn  ! namelist unit number
-    !integer           :: shrlogunit
     real(r8)          :: dtmax_in  ! Maximum overall time step.
     real(r8)          :: dtmin_in  ! Minimum dynamic time step for source
     real(r8)          :: dtcfl_in  ! Maximum CFL time step X-Y propagation.
@@ -1610,14 +1610,14 @@ contains
       rc = ESMF_FAILURE
       return
     end if
-    call mpi_bcast(history_n, 1, MPI_INTEGER, 0, mpi_comm, ierr)
+    call mpi_bcast(history_n, 1, MPI_INTEGER, 0, mpicomm, ierr)
     if (ierr /= MPI_SUCCESS) then
       call ESMF_LogWrite(trim(subname)//' error in mpi broadcast for history_n ',&
            ESMF_LOGMSG_ERROR, line=__LINE__, file=u_FILE_u)
       rc = ESMF_FAILURE
       return
     end if
-    call mpi_bcast(history_option, len(history_option), MPI_CHARACTER, 0, mpi_comm, ierr)
+    call mpi_bcast(history_option, len(history_option), MPI_CHARACTER, 0, mpicomm, ierr)
     if (ierr /= MPI_SUCCESS) then
       call ESMF_LogWrite(trim(subname)//' error in mpi broadcast for history_option ',&
            ESMF_LOGMSG_ERROR, line=__LINE__, file=u_FILE_u)
@@ -1669,10 +1669,10 @@ contains
     call ESMF_LogWrite(trim(subname)//' call w3init', ESMF_LOGMSG_INFO)
     if (cesmcoupled .and. runtype == 'branch') then
        call w3init ( 1, .false., 'ww3', mds, ntrace, odat, flgrd, flgr2, flgd, flg2, &
-            npts, x, y, pnames, iprt, prtfrm, mpi_comm, branch_fname=initfile)
+            npts, x, y, pnames, iprt, prtfrm, mpicomm, branch_fname=initfile)
     else
        call w3init ( 1, .false., 'ww3', mds, ntrace, odat, flgrd, flgr2, flgd, flg2, &
-            npts, x, y, pnames, iprt, prtfrm, mpi_comm)
+            npts, x, y, pnames, iprt, prtfrm, mpicomm)
     end if
 
     ! NOTE: these need to be set again AFTER w3init is run - since these values will be overwritten

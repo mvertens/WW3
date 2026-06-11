@@ -63,6 +63,7 @@ endif()
 #-------------------------
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/src_list.cmake)
 
+list(APPEND ftn_src ${pio_src})
 list(APPEND ftn_src ${nuopc_mesh_cap_src})
 
 # Handle PDLIB, SCRIP, SCRIPNC build files directly instead of through configuration file

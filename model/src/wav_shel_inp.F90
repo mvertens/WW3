@@ -54,9 +54,6 @@ contains
     ! local variables
     integer :: i
 
-    ! local variables
-    integer :: i
-
     ! Note that nds is set to mds in w3initmd.F90 - mds is a local array
     ! The following units are referenced in module w3initmd
     ! NDS(1) ! OUTPUT LOG: General output unit number ("log file")
