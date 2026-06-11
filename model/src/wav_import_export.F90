@@ -399,7 +399,7 @@ contains
     ! Obtain the wave input from the mediator
     !---------------------------------------------------------------------------
 
-    use w3gdatmd    , only: nsea, NX, NY, w3setg
+    use w3gdatmd    , only: nsea, nseal, MAPSTA, NX, NY, w3setg
     use w3idatmd    , only: CX0, CY0, CXN, CYN, DT0, DTN, ICEI, WLEV, INFLAGS1, ICEP1, ICEP5
     use w3idatmd    , only: TC0, TCN, TLN, TIN, TI1, TI5, TW0, TWN, WX0, WY0, WXN, WYN
     use w3idatmd    , only: UX0, UY0, UXN, UYN, TU0, TUN
@@ -682,20 +682,18 @@ contains
     !---------------------------------------------------------------------------
 
     use wav_kind_mod,   only : R8 => SHR_KIND_R8
-    use w3adatmd      , only : USSX, USSY, HS, THM, FP0
-    use w3adatmd      , only : THP0, TAUICE
-    use w3adatmd      , only : TUSX, TUSY, PHIOC, PHIAW
+    use w3adatmd      , only : USSX, USSY, USSP,
+    use w3adatmd      , only : HS, THM, FP0, THP0, TAUICE, TUSX, TUSY, PHIOC, PHIAW
     use w3adatmd      , only : PHS, PDIR, T01, PT1, charn, T02
-    use w3odatmd      , only : naproc, iaproc, NOSWLL, nseal
-    use w3adatmd      , only : USSP, tauox, tauoy, wnmean, taubbl
+    use w3adatmd      , only : tauox, tauoy, wnmean, taubbl
     use w3adatmd      , only : w3seta
     use w3idatmd      , only : w3seti
     use w3wdatmd      , only : va, w3setw
-    use w3odatmd      , only : w3seto
-    use w3gdatmd      , only : mapsf, MAPSTA, USSPF, NK, w3setg
+    use w3odatmd      , only : w3seto, naproc, iaproc
+    use w3odatmd      , only : NOSWLL
+    use w3gdatmd      , only : nseal, mapsf, MAPSTA, USSPF, NK, w3setg
     use w3iogomd      , only : CALC_U3STOKES
 #ifdef W3_CESMCOUPLED
-    use w3odatmd      , only : naproc, iaproc
     use w3wdatmd      , only : ASF, UST
     use w3adatmd      , only : USSX, USSY, USSHX, USSHY, UD, HS
     use w3idatmd      , only : HSL
