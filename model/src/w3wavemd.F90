@@ -2621,9 +2621,8 @@ CONTAINS
 #ifdef W3_MPI
             END IF
           END IF
-        end if ! if (.not. use_restartnc)
+       end if ! if (.not. use_restartnc)
 #endif
-        end if ! if (.not. use_restartnc)
         !
 #ifdef W3_MPI
         IF ( FLOUT(5) .AND. NRQBP.NE.0 ) THEN
