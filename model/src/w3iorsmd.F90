@@ -337,6 +337,7 @@ CONTAINS
 #ifdef W3_TIMINGS
     USE W3PARALL, ONLY: PRINT_MY_TIME
 #endif
+    USE w3odatmd, ONLY : RUNTYPE, INITFILE
     USE w3adatmd, ONLY : USSHX, USSHY
 #ifdef W3_PDLIB
     USE PDLIB_FIELD_VEC
@@ -345,7 +346,8 @@ CONTAINS
     USE W3SERVMD, ONLY: STRACE
 #endif
     !
-    IMPLICIT NONE
+    use w3timemd, only: set_user_timestring
+    use w3odatmd, only: use_user_restname, user_restfname, ndso
     !
     !/
     !/ ------------------------------------------------------------------- /
@@ -390,11 +392,12 @@ CONTAINS
     LOGICAL                 :: NDSROPN
     CHARACTER(LEN=4)        :: TYPE
     CHARACTER(LEN=10)       :: VERTST
-    CHARACTER(LEN=40)       :: FNAME
+    CHARACTER(LEN=512)      :: FNAME
     CHARACTER(LEN=26)       :: IDTST
     CHARACTER(LEN=30)       :: TNAME
     CHARACTER(LEN=15)       :: TIMETAG
-
+    character(len=16)       :: user_timestring    !YYYY-MM-DD-SSSSS
+    logical                 :: exists
     ! DEFINED A LOCAL FNMPRE TO AVOID CHANGE THE GLOBAL VALUE
     CHARACTER(LEN=256)       :: FNMPRE_LOCAL
 
@@ -475,7 +478,59 @@ CONTAINS
     !
     ! open file ---------------------------------------------------------- *
     !
-    if (present(filename)) then ! only when restart_nc and restart_from_binary=true
+    if (use_user_restname) then
+      ierr = -99
+      if (.not. write) then
+        if (runtype == 'initial') then
+          if (len_trim(initfile) == 0) then
+            ! no IC file, use startup option
+            goto 800
+          else
+            ! IC file exists - use it
+            fname = trim(initfile)
+          end if
+        else
+          call set_user_timestring(time,user_timestring)
+          fname = trim(user_restfname)//trim(user_timestring)
+          inquire( file=trim(fname), exist=exists)
+          if (.not. exists) then
+             fname = trim(initfile)
+             inquire( file=trim(fname), exist=exists)
+             if (.not. exists) then
+                call extcde (60, msg="required initial/restart file " // trim(fname) // " does not exist")
+             endif
+          end if
+        end if
+      else
+        call set_user_timestring(time,user_timestring)
+        fname = trim(user_restfname)//trim(user_timestring)
+      end if
+      ! write out filename
+      if (iaproc == naprst) then
+        IF ( WRITE ) THEN
+          write (ndso,'(a)') 'WW3: writing restart file '//trim(fname)
+        else
+          write (ndso,'(a)') 'WW3: reading initial/restart file '//trim(fname)
+        end if
+      end if
+      if ( write ) then
+        ! In I/O-server mode (IOSFLG) only NAPRST opens the file; the other
+        ! ranks skip the OPEN and must still see IERR=0 so they take the normal
+        ! (TYPE unchanged) path and join the restart gather below. Without this
+        ! their uninitialized IERR can be nonzero, sending them to the
+        ! file-open-failed branch that resets TYPE to WIND/CALM and makes them
+        ! skip the gather, which deadlocks the NAPRST collector. (The FNMRST
+        ! open branch further down already initializes IERR=0 the same way.)
+        IERR = 0
+        IF ( .NOT.IOSFLG .OR. IAPROC.EQ.NAPRST )        &
+             open (ndsr,file=trim(fname), form='unformatted', convert=file_endian,       &
+             ACCESS='STREAM',IOSTAT=IERR)
+      ELSE  ! READ
+        open (ndsr, file=trim(fname), form='unformatted', convert=file_endian,       &
+             ACCESS='STREAM',IOSTAT=IERR,           &
+             STATUS='OLD',ACTION='READ')
+      END IF
+    else if (present(filename)) then ! only when restart_nc and restart_from_binary=true
       open (ndsr,file=trim(filename),form='unformatted', convert=file_endian, &
            access='stream',iostat=ierr, status='old',action='read')
     else
@@ -510,7 +565,7 @@ CONTAINS
       IFILE  = IFILE + 1
       !
 #ifdef W3_T
-      WRITE (NDST,9001) FNAME, LRECL
+      WRITE (NDST,9001) trim(FNAME), LRECL
 #endif
       !
       IF(NDST.EQ.NDSR)THEN
@@ -523,13 +578,14 @@ CONTAINS
       IF ( WRITE ) THEN
         IERR = 0
         IF ( .NOT.IOSFLG .OR. IAPROC.EQ.NAPRST )                    &
-          OPEN (NDSR,FILE=FNMPRE_LOCAL(:J)//FNAME,form='UNFORMATTED', convert=file_endian,       &
-          ACCESS='STREAM',IOSTAT=IERR)
+             OPEN (NDSR,FILE=FNMPRE_LOCAL(:J)//trim(FNAME),form='UNFORMATTED', convert=file_endian,       &
+             ACCESS='STREAM',IOSTAT=IERR)
       ELSE
-        OPEN (NDSR,FILE=FNMPRE_LOCAL(:J)//FNAME,form='UNFORMATTED', convert=file_endian,       &
-          ACCESS='STREAM',IOSTAT=IERR,STATUS='OLD',ACTION='READ')
+        OPEN (NDSR,FILE=FNMPRE_LOCAL(:J)//trim(FNAME),form='UNFORMATTED', convert=file_endian,       &
+             ACCESS='STREAM',IOSTAT=IERR,                  &
+             STATUS='OLD',ACTION='READ')
       END IF
-    end if ! if (present(filename))
+    end if
     !
     ! In/Out file is successfully opened
     IF (IERR .EQ. 0) THEN
@@ -602,6 +658,7 @@ CONTAINS
         !
       END IF
     ELSE
+800   CONTINUE
 #ifdef W3_LN0
       TYPE   = 'WIND'
       RSTYPE = 1
@@ -636,11 +693,21 @@ CONTAINS
       ELSE
         READ (NDSR,POS=RPOS,IOSTAT=IERR) TTIME
         IF (IERR.NE.0) CALL EXTIOF(NDSE,IERR,'W3IORS','',30)
+#ifdef W3_CESMCOUPLED
+        if (runtype == 'branch' .or. runtype == 'continue') then
+          IF (TIME(1).NE.TTIME(1) .OR. TIME(2).NE.TTIME(2)) THEN
+            IF ( IAPROC .EQ. NAPERR )                           &
+                 WRITE (NDSE,906) TTIME, TIME
+            CALL EXTCDE ( 20 )
+          END IF
+        end if
+#else
         IF (TIME(1).NE.TTIME(1) .OR. TIME(2).NE.TTIME(2)) THEN
           IF ( IAPROC .EQ. NAPERR )                           &
                WRITE (NDSE,906) TTIME, TIME
           CALL EXTCDE ( 20 )
         END IF
+#endif
       END IF
       !
 #ifdef W3_T
@@ -1124,6 +1191,8 @@ CONTAINS
               IF (IERR.NE.0) CALL EXTIOF(NDSE,IERR,'W3IORS','',31, &
                                          ISWRITE=.TRUE.,POS=RPOS)
               WRITE(NDSR,IOSTAT=IERR) USSHY(1:NSEA)
+              IF (IERR.NE.0) CALL EXTIOF(NDSE,IERR,'W3IORS','',31, &
+                                         ISWRITE=.TRUE.,POS=RPOS)
             ENDIF
             IF ( FLOGRR(7,2) ) THEN
               WRITE(NDSR,IOSTAT=IERR) UBA(1:NSEA)

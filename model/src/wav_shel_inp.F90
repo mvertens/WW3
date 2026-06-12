@@ -9,8 +9,7 @@
 !> @date 01-05-2022
 module wav_shel_inp
 
-  use w3odatmd, only: nogrp, ngrpp, FNMGRD, FNMPNT, FNMRST
-  use mpi_f08
+  use w3odatmd, only: nogrp, ngrpp
 
   implicit none
   private ! except
@@ -32,12 +31,14 @@ module wav_shel_inp
   real, allocatable, public :: x(:)               !< @public x locations for point output
   real, allocatable, public :: y(:)               !< @public y locations for point output
 
+  include "mpif.h"
+
   !===============================================================================
 contains
   !===============================================================================
   !> Set IO unit numbers
   !!
-  !! @param[in]    stdout           logfile unit on the root task, otherwise 6
+  !! @param[in]    stdout           unit number for stdout
   !! @param[out]   mds              an array of 13 unit numbers
   !! @param[out]   ntrace           an array of 2 unit numbers used for trace output
   !!
@@ -49,10 +50,7 @@ contains
 
     ! Input parameter
     integer , intent(in)   :: stdout
-    integer , intent(out)  :: mds(15), ntrace(2)
-
-    ! local variables
-    integer :: i
+    integer , intent(out)  :: mds(13), ntrace(2)
 
     ! Note that nds is set to mds in w3initmd.F90 - mds is a local array
     ! The following units are referenced in module w3initmd
@@ -82,13 +80,17 @@ contains
     ! By default, unit numbers between 50 and 99 are scanned to find an
     ! unopened unit number
 
-    do i = 5,size(mds)
-      call ESMF_UtilIOUnitGet(mds(i))
-      open(unit=mds(i), status='scratch')
-    end do
-    do i = 5,size(mds)
-      close(mds(i))
-    end do
+    call ESMF_UtilIOUnitGet(mds(5)) ; open(unit=mds(5)  , status='scratch')
+    call ESMF_UtilIOUnitGet(mds(6)) ; open(unit=mds(6)  , status='scratch')
+    call ESMF_UtilIOUnitGet(mds(7)) ; open(unit=mds(7)  , status='scratch')
+    call ESMF_UtilIOUnitGet(mds(8)) ; open(unit=mds(8)  , status='scratch')
+    call ESMF_UtilIOUnitGet(mds(9)) ; open(unit=mds(9)  , status='scratch')
+    call ESMF_UtilIOUnitGet(mds(10)); open(unit=mds(10) , status='scratch')
+    call ESMF_UtilIOUnitGet(mds(11)); open(unit=mds(11) , status='scratch')
+    call ESMF_UtilIOUnitGet(mds(12)); open(unit=mds(12) , status='scratch')
+    call ESMF_UtilIOUnitGet(mds(13)); open(unit=mds(13) , status='scratch')
+    close(mds(5)); close(mds(6)); close(mds(7)); close(mds(8)); close(mds(9)); close(mds(10))
+    close(mds(11)); close(mds(12)); close(mds(13))
 
     ntrace(1) = mds(3)
     ntrace(2) = 10
@@ -98,27 +100,24 @@ contains
   !===============================================================================
   !> Read ww3_shel.inp Or ww3_shel.nml
   !!
-  !! @param[in]  mpicomm           mpi communicator
-  !! @param[in]  mds                an array of unit numbers
-  !! @param[in]  time0_overwrite    the initial time for overwriting the nml file, optional
-  !! @param[in]  timen_overwrite    the endding time for overwriting the nml file, optional
-  !! @param[out] rstfldlist         a list of additional restart fields, optional
+  !! @param[in]  mpi_comm           mpi communicator
   !!
   !> @author mvertens@ucar.edu, Denise.Worthen@noaa.gov
   !> @date 01-05-2022
-  subroutine read_shel_config(mpicomm, mds, time0_overwrite, timen_overwrite, rstfldlist)
+  subroutine read_shel_config(mpi_comm, mds, time0_overwrite, timen_overwrite)
 
     use wav_shr_flags
-    use w3nmlshelmd    , only : nml_domain_t, nml_input_t, nml_output_type_t, nml_output_path_t
-    use w3nmlshelmd    , only : nml_output_date_t, nml_homog_count_t, nml_homog_input_t
+    use mpi_f08        , only : MPI_COMM_T => MPI_COMM
+    use w3nmlshelmd    , only : nml_domain_t, nml_input_t, nml_output_type_t
+    use w3nmlshelmd    , only : nml_output_date_t, nml_output_path_t, nml_homog_count_t, nml_homog_input_t
     use w3nmlshelmd    , only : w3nmlshel
-    use w3gdatmd       , only : flagll, dtmax
+    use w3gdatmd       , only : flagll, dtmax, nx, ny, gtype
     use w3wdatmd       , only : time, w3ndat, w3dimw, w3setw
     use w3adatmd       , only : w3naux, w3dima, w3seta
     use w3idatmd       , only : inflags1, inflags2, flagsc
     use w3odatmd       , only : w3nout, w3seto, nds
     use w3odatmd       , only : naproc, iaproc, napout, naperr
-    use w3odatmd       , only : fnmpre, iostyp, notype
+    use w3odatmd       , only : idout, fnmpre, iostyp, notype
     use w3odatmd       , only : flogrr, flogr, ofiles
     use w3iogrmd       , only : w3iogr
     use w3iogomd       , only : w3readflgrd, fldout, w3flgrdflag
@@ -130,19 +129,18 @@ contains
 #ifdef W3_NL5
     use w3wdatmd       , only : qi5tbeg
 #endif
-    use wav_kind_mod  , only : CL => shr_kind_cl
     use w3odatmd      , only : use_historync
 
     ! input/output parameters
-    type(MPI_COMM),    intent(in) :: mpicomm
-    integer,           intent(in) :: mds(:)
-    integer,           intent(in),  optional :: time0_overwrite(2)
-    integer,           intent(in),  optional :: timen_overwrite(2)
-    character(len=CL), intent(out), optional :: rstfldlist
+    integer, intent(in) :: mpi_comm
+    integer, intent(in) :: mds(:)
+    integer, intent(in), optional :: time0_overwrite(2)
+    integer, intent(in), optional :: timen_overwrite(2)
 
     ! local parameters
     integer, parameter  :: nhmax =    200
 
+    type(MPI_COMM_T)          :: mpicomm_f08
     type(nml_domain_t)       :: nml_domain
     type(nml_input_t)        :: nml_input
     type(nml_output_type_t)  :: nml_output_type
@@ -153,9 +151,9 @@ contains
 
     integer             :: ndsi, ndsi2, ndss, ndso, ndse, ndst, ndsl
     integer             :: ndsm, ndsen, ierr, j, i, iloop, ipts
-    integer             :: nh(-7:10), tho(2,-7:10,nhmax)
-    integer             :: startdate(8), stopdate(8), ihh(-7:10)
-    integer             :: jfirst, ierr_mpi, ih, n_tot
+    integer             :: nh(-7:10), tho(2,-7:10,nhmax), rcld(7:9)
+    integer             :: nodata(7:9), startdate(8), stopdate(8), ihh(-7:10)
+    integer             :: jfirst, ierr_mpi, flagtide, ih, n_tot
     real                :: factor, dttst, xx, yy, ha(nhmax,-7:10)
     real                :: hd(nhmax,-7:10), hs(nhmax,-7:10)
     double precision    :: startjulday, stopjulday
@@ -174,13 +172,11 @@ contains
     character(len=8)    :: words(7)=''
     character(len=256)  :: filename
     logical             :: flflg, flhom, tflagi, prtfrm, flgnml, flh(-7:10)
+    integer             :: thrlev = 1
     integer             :: time0(2), timen(2), ttime(2)
     character(len=80)   :: msg1
     logical             :: is_open
     integer             :: memunit
-#ifdef W3_OMPH
-    integer             :: thrlev = 1
-#endif
 
     data idflds / 'ice param. 1 ' , 'ice param. 2 ' , &
          'ice param. 3 ' , 'ice param. 4 ' ,          &
@@ -212,9 +208,8 @@ contains
     memunit = 740+IAPROC
     call print_logmsg(740+IAPROC, 'read_shel_config, step 1', w3_debuginit_flag)
 
-    ! module variables ndso, ndse, ndst are set in w3initmd using mds;  w3initmd is
-    ! called by either cesm_init or uwm_int after calling the read_shel_config routine.
-    ! these nd units are local variables here
+    ! ndso, ndse, ndst are set in w3initmd using mds;  w3initmd is called by either
+    ! cesm_init or uwm_int after calling the read_shel_config routine
     ndso =  mds(1)
     ndse =  mds(1)
     ndst =  mds(1)
@@ -267,23 +262,18 @@ contains
     ! Read nml file if available
     !--------------------
 
-#ifndef W3_CESMCOUPLED
-    filename = trim(fnmpre)//"ww3_shel.nml"
-#else
     filename = trim(fnmpre)//"wav_in"
-#endif
-
     inquire(file=trim(filename), exist=flgnml)
 
     if (flgnml) then
-
-       open(newunit=ndsi, file=trim(filename), status='old', iostat=ierr)
+      open(newunit=ndsi, file=trim(filename), status='old', iostat=ierr)
 
       !--------------------
       ! Read namelist
       !--------------------
 
-      call w3nmlshel (mpicomm, ndsi, trim(filename), nml_domain, nml_input, &
+      mpicomm_f08%MPI_VAL = mpi_comm
+      call w3nmlshel (mpicomm_f08, ndsi, trim(filename), nml_domain, nml_input, &
            nml_output_type, nml_output_date, nml_output_path, nml_homog_count, nml_homog_input, ierr)
 
       !--------------------
@@ -398,14 +388,8 @@ contains
         if ( iaproc .eq. napout ) write (ndso,921) idflds(j), yesxno, strng
       end do
       if (w3_cou_flag) then
-        if (flagsc(1) .and. inflags1(2) .and. .not. flagsc(2)) then
-          if ( iaproc .eq. naperr ) write (ndse,1102)
-          call extcde ( 1102 )
-        end if
-        if (flagsc(2) .and. inflags1(1) .and. .not. flagsc(1)) then
-          if ( iaproc .eq. naperr ) write (ndse,1102)
-          call extcde ( 1102 )
-        end if
+        if (flagsc(1) .and. inflags1(2) .and. .not. flagsc(2)) goto 2102
+        if (flagsc(2) .and. inflags1(1) .and. .not. flagsc(1)) goto 2102
       end if
 
       inflags1(10) = .false.
@@ -522,8 +506,7 @@ contains
           end if
           odat(33) = int(dtmax)
         else if (mod(odat(33),int(dtmax)) .ne. 0) then
-          if ( iaproc .eq. naperr ) write (ndse,1009) odat(33), nint(dtmax)
-          call extcde ( 1009 )
+          goto 2009
         end if
       end if
 
@@ -532,10 +515,7 @@ contains
       !--------------------
 
       npts   = 0
-      notype = 6
-      if (w3_cou_flag) then
-        notype = 7
-      end if
+      notype = 7
       ! history frequency is determined by history_n and history_option
       if (use_historync .and. odat(3) .eq. 0) then
         fldout = nml_output_type%field%list
@@ -552,17 +532,13 @@ contains
             ! type 1: fields of mean wave parameters
             fldout = nml_output_type%field%list
             call w3flgrdflag ( ndso, ndso, ndse, fldout, flgd, flgrd, iaproc, napout, ierr )
-            if ( ierr .ne. 0 ) call extcde ( 1200 )
+            if ( ierr .ne. 0 ) goto 2222
 
           else if ( j .eq. 2 ) then
 
             ! type 2: point output
             open (newunit=ndsl, file=trim(fnmpre)//trim(nml_output_type%point%file), &
-                 form='formatted', status='old', iostat=ierr)
-            if (ierr /= 0) then
-              if (iaproc == naperr) write (ndse,1104) ierr
-              call extcde ( 1104 )
-            end if
+                 form='formatted', status='old', err=2104, iostat=ierr)
 
             ! first loop to count the number of points
             ! second loop to allocate the array and store the points
@@ -577,21 +553,14 @@ contains
                   ipts = 0 ! reset counter to be reused for next do loop
                 else
                   allocate ( x(1), y(1), pnames(1) )
-                  if ( iaproc .eq. naperr ) write (ndse,1054)
-                  call extcde ( 1054 )
+                  goto 2054
                 end if
               end if
 
               do
-                read (ndsl,*,iostat=ierr) tmpline
-                if (ierr > 0) then
-                  if ( iaproc .eq. naperr ) write (ndse,1004) ierr
-                  call extcde ( 1004 )
-                else if (ierr < 0) then
-                  exit
-                end if
+                read (ndsl,*,err=2004,iostat=ierr) tmpline
                 ! if end of file or stopstring, then exit
-                if ( index(tmpline,"STOPSTRING").ne.0 ) exit
+                if ( ierr.ne.0 .or. index(tmpline,"STOPSTRING").ne.0 ) exit
 
                 ! leading blanks removed and placed on the right
                 test = adjustl ( tmpline )
@@ -600,16 +569,8 @@ contains
                   cycle
                 else
                   ! otherwise, backup to beginning of line
-                  backspace ( ndsl, iostat=ierr)
-                  if (ierr /= 0) then
-                    if (iaproc == naperr) write(ndse, 1004) ierr
-                    call extcde ( 1004 )
-                  end if
-                  read (ndsl,*,iostat=ierr) xx, yy, pn
-                  if (ierr /= 0) then
-                    if (iaproc == naperr) write(ndse, 1004) ierr
-                    call extcde ( 1004 )
-                  end if
+                  backspace ( ndsl, err=2004, iostat=ierr)
+                  read (ndsl,*,err=2004,iostat=ierr) xx, yy, pn
                 end if
                 ipts = ipts + 1
                 if ( iloop .eq. 1 ) cycle
@@ -675,7 +636,7 @@ contains
             ! Type 7: coupling
             fldout = nml_output_type%coupling%sent
             call w3flgrdflag ( ndso, ndso, ndse, fldout, flg2, flgr2, iaproc, napout, ierr )
-            if ( ierr .ne. 0 ) call extcde ( 1201 )
+            if ( ierr .ne. 0 ) goto 2222
             fldin = nml_output_type%coupling%received
             cplt0 = nml_output_type%coupling%couplet0
 #endif
@@ -687,14 +648,7 @@ contains
       ! Extra fields to be written in the restart
       fldrst = nml_output_type%restart%extra
       call w3flgrdflag ( ndso, ndso, ndse, fldrst, flogr, flogrr, iaproc, napout, ierr )
-      if (present(rstfldlist)) then
-        if (trim(fldrst) .ne. 'unset')then
-          rstfldlist = trim(fldrst)
-        else
-          rstfldlist = ' '
-        end if
-      end if
-      if ( ierr .ne. 0 ) call extcde ( 1202 )
+      if ( ierr .ne. 0 ) goto 2222
 
       ! force minimal allocation to avoid memory seg fault
       if ( .not.allocated(x) .and. npts.eq.0 ) allocate ( x(1), y(1), pnames(1) )
@@ -726,10 +680,7 @@ contains
         n_tot = nml_homog_count%n_tot
 
         do j=jfirst,10
-          if ( nh(j) .gt. nhmax ) then
-            if ( iaproc .eq. naperr ) write (ndse,1006) idtst, nh(j)
-            call extcde ( 1006 )
-          end if
+          if ( nh(j) .gt. nhmax ) goto 2006
         end do
 
         ! Store homogeneous fields
@@ -769,8 +720,7 @@ contains
             case ('MOV')
               j=10
             case DEFAULT
-              if ( iaproc .eq. naperr ) write (ndse,1062) idtst
-              call extcde ( 1062 )
+              goto 2062
             end SELECT
             ihh(j)=ihh(j)+1
             read(nml_homog_input(ih)%date,*) tho(:,j,ihh(j))
@@ -811,31 +761,9 @@ contains
              ( flh(4)  .and. (nh(4).eq.0)  ) .or. &
              ( flh(5)  .and. (nh(5).eq.0)  ) .or. &
              ( flh(6)  .and. (nh(6).eq.0)  ) .or. &
-             ( flh(10) .and. (nh(10).eq.0) ) ) then
-               if ( iaproc .eq. naperr ) write (ndse,1007)
-               call extcde ( 1007 )
-        end if
+             ( flh(10) .and. (nh(10).eq.0) ) ) goto 2007
 
       end if ! flhom
-
-      !--------------------
-      ! 2.7 User-defined directory
-      !--------------------
-
-      FNMGRD = trim(nml_output_path%grd_out)
-      if (FNMGRD(len_trim(FNMGRD):len_trim(FNMGRD)) /= '/') then
-        FNMGRD = trim(FNMGRD) // '/'
-      end if
-
-      FNMPNT = trim(nml_output_path%pnt_out)
-      if (FNMPNT(len_trim(FNMPNT):len_trim(FNMPNT)) /= '/') then
-        FNMPNT = trim(FNMPNT) // '/'
-      end if
-
-      FNMRST = trim(nml_output_path%rst_out)
-      if (FNMRST(len_trim(FNMRST):len_trim(FNMRST)) /= '/') then
-        FNMRST = trim(FNMRST) // '/'
-      end if
 
     end if ! flgnml
 
@@ -903,14 +831,8 @@ contains
         if ( iaproc .eq. napout ) write (ndso,921) idflds(j), yesxno, strng
       end do
       if (w3_cou_flag) then
-        if (flagsc(1) .and. inflags1(2) .and. .not. flagsc(2)) then
-          if ( iaproc .eq. naperr ) write (ndse,1102)
-          call extcde ( 1102 )
-        end if
-        if (flagsc(2) .and. inflags1(1) .and. .not. flagsc(1)) then
-          if ( iaproc .eq. naperr ) write (ndse,1102)
-          call extcde ( 1102 )
-        end if
+        if (flagsc(1) .and. inflags1(2) .and. .not. flagsc(2)) goto 2102
+        if (flagsc(2) .and. inflags1(1) .and. .not. flagsc(1)) goto 2102
       end if
 
       call print_memcheck(memunit, 'memcheck_____:'//' read_shel_config SECTION 2b')
@@ -982,10 +904,7 @@ contains
 
       call print_logmsg(740+IAPROC, '2.4 Output dates ',  w3_debuginit_flag)
       npts   = 0
-      notype = 6
-      if (w3_cou_flag) then
-        notype = 7
-      end if
+      notype = 7
       do j = 1, notype
         write(msg1,*)'J=', J, '/ NOTYPE=', NOTYPE
         call nextln ( comstr , ndsi , ndsen )
@@ -1003,29 +922,15 @@ contains
           read(words( 5 ), * ) odat(20)
           if (words(6) .eq. 'T') then
             call nextln ( comstr , ndsi , ndsen )
-            read (ndsi,*,iostat=ierr)(odat(i),i=5*(8-1)+1,5*8)
-            if (ierr < 0) then
-              if ( iaproc .eq. naperr ) write (ndse, 1001)
-              call extcde ( 1001 )
-            else if (ierr > 0) then
-              if ( iaproc .eq. naperr ) write (ndse, 1002) ierr
-              call extcde ( 1002 )
-            end if
+            read (ndsi,*,end=2001,err=2002)(odat(i),i=5*(8-1)+1,5*8)
             if(iaproc .eq. naproc) write(*,*)'odat(j=4): ',(odat(i),i=5*(8-1)+1,5*8)
           end if
           if (words(7) .eq. 'T') then
             call nextln ( comstr , ndsi , ndsen )
-            read (ndsi,'(a)',iostat=ierr) fldrst
-            if (ierr < 0) then
-              if (iaproc == naperr) write(ndse,1001)
-              call extcde(1001)
-            else if (ierr > 0) then
-              if (iaproc == naperr) write(ndse,1002) ierr
-              call extcde(1002)
-            end if
+            read (ndsi,'(a)',end=2001,err=2002) fldrst
           end if
           call w3flgrdflag ( ndso, ndso, ndse, fldrst, flogr, flogrr, iaproc, napout, ierr )
-          if ( ierr .ne. 0 ) call extcde ( 1203 )
+          if ( ierr .ne. 0 ) goto 2222
         else
 
           !inline new variable to read if present ofiles(j), if not ==0
@@ -1080,14 +985,8 @@ contains
           else
 
             ofiles(j)=0
-            read (ndsi,*,iostat=ierr)(odat(i),i=5*(j-1)+1,5*j)
-            if (ierr < 0) then
-              if (iaproc == naperr) write(ndse,1001)
-              call extcde(1001)
-            else if (ierr > 0) then
-              if (iaproc == naperr) write(ndse,1002) ierr
-              call extcde(1002)
-            end if
+            read (ndsi,*,end=2001,err=2002)(odat(i),i=5*(j-1)+1,5*j)
+
           end if !j le 2
           odat(5*(j-1)+3) = max ( 0 , odat(5*(j-1)+3) )
           write(msg1, *) 'read_shel_config NOTTYPE', J
@@ -1103,7 +1002,7 @@ contains
 
               ! type 1: fields of mean wave parameters
               call w3readflgrd ( ndsi, ndso, 9, ndsen, comstr, flgd, flgrd, iaproc, napout, ierr )
-              if ( ierr .ne. 0 ) call extcde ( 1204 )
+              if ( ierr .ne. 0 ) goto 2222
 
             else if ( j .eq. 2 ) then
 
@@ -1115,7 +1014,7 @@ contains
                 else
                   ndsi2  = ndss
 #ifdef W3_MPI
-                  call mpi_barrier (mpicomm,ierr_mpi)
+                  call mpi_barrier (mpi_comm,ierr_mpi)
 #endif
                   open (ndss,file=trim(fnmpre)//'ww3_shel.scratch')
                   rewind (ndss)
@@ -1125,8 +1024,7 @@ contains
                       allocate ( x(npts), y(npts), pnames(npts) )
                     else
                       allocate ( x(1), y(1), pnames(1) )
-                      if ( iaproc .eq. naperr ) write (ndse,1054)
-                      call extcde ( 1054 )
+                      goto 2054
                     end if
                   end if
                 end if
@@ -1169,12 +1067,12 @@ contains
               if ( npts.eq.0 .and. iaproc.eq.napout ) write (ndso,2947)
               if ( iaproc .eq. 1 ) then
 #ifdef W3_MPI
-                call mpi_barrier ( mpicomm, ierr_mpi )
+                call mpi_barrier ( mpi_comm, ierr_mpi )
 #endif
                 close (ndss,status='delete')
               else
 #ifdef W3_MPI
-                call mpi_barrier ( mpicomm, ierr_mpi )
+                call mpi_barrier ( mpi_comm, ierr_mpi )
 #endif
                 close (ndss)
               end if
@@ -1214,16 +1112,9 @@ contains
               ! Type 7: coupling
 #ifdef W3_COU
               call w3readflgrd ( ndsi, ndso, ndss, ndsen, comstr, flg2, flgr2, iaproc, napout, ierr )
-              if ( ierr .ne. 0 ) call extcde ( 1205 )
+              if ( ierr .ne. 0 ) goto 2222
               call nextln ( comstr , ndsi , ndsen )
-              read (ndsi,'(a)',iostat=ierr) fldin
-              if (ierr < 0) then
-                if (iaproc == naperr) write(ndse,1001)
-                call extcde(1001)
-              else if (ierr > 0) then
-                if (iaproc == naperr) write(ndse,1002) ierr
-                call extcde(1002)
-              end if
+              read (ndsi,'(a)',end=2001,err=2002,iostat=ierr) fldin
 #endif
 
             end if ! j
@@ -1256,10 +1147,7 @@ contains
                idtst.ne.idstr(1)  .and. idtst.ne.idstr(2)  .and.   &
                idtst.ne.idstr(3)  .and. idtst.ne.idstr(4)  .and.   &
                idtst.ne.idstr(5)  .and. idtst.ne.idstr(6)  .and.   &
-               idtst.ne.idstr(10) .and. idtst.ne.'STP' ) then
-            if ( iaproc .eq. naperr ) write (ndse,1005) idtst
-            call extcde ( 1005 )
-          end if
+               idtst.ne.idstr(10) .and. idtst.ne.'STP' ) goto 2005
 
           ! Stop conditions
           if ( idtst .eq. 'STP' ) then
@@ -1273,10 +1161,7 @@ contains
           do j=lbound(idstr,1), 10
             if ( idtst .eq. idstr(j) ) then
               nh(j)    = nh(j) + 1
-              if ( nh(j) .gt. nhmax ) then
-                if ( iaproc .eq. naperr ) write (ndse,1006) idtst, nh(j)
-                call extcde ( 1006 )
-              end if
+              if ( nh(j) .gt. nhmax ) goto 2006
               IF ( J .LE. 1  ) THEN ! water levels, etc. : get HA
                 read (ndsi,*) idtst,           &
                      tho(1,j,nh(j)), tho(2,j,nh(j)),            &
@@ -1342,10 +1227,7 @@ contains
              ( flh(4)  .and. (nh(4).eq.0)  ) .or. &
              ( flh(5)  .and. (nh(5).eq.0)  ) .or. &
              ( flh(6)  .and. (nh(6).eq.0)  ) .or. &
-             ( flh(10) .and. (nh(10).eq.0) ) ) then
-          if ( iaproc .eq. naperr ) write (ndse,1007)
-          call extcde ( 1007 )
-        end if
+             ( flh(10) .and. (nh(10).eq.0) ) ) goto 2007
 
       end if ! flhom
       close(ndsi)
@@ -1392,10 +1274,7 @@ contains
 #endif
 
     dttst  = dsec21 ( time0 , timen )
-    if ( dttst .le. 0. ) then
-      if ( iaproc .eq. naperr ) write (ndse,1003)
-      call extcde ( 1003 )
-    end if
+    if ( dttst .le. 0. ) goto 2003
 
     !--------------------
     ! 2.3 Domain setup
@@ -1539,7 +1418,46 @@ contains
     !--- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     if ( iaproc .eq. napout ) write (ndso,951) 'Wave model ...'
+    goto 2222
 
+    ! Error escape locations
+2001 CONTINUE
+    IF ( IAPROC .EQ. NAPERR ) WRITE (NDSE,1001)
+    CALL EXTCDE ( 1001 )
+2002 CONTINUE
+    IF ( IAPROC .EQ. NAPERR ) WRITE (NDSE,1002) IERR
+    CALL EXTCDE ( 1002 )
+2102 CONTINUE
+    IF ( IAPROC .EQ. NAPERR ) WRITE (NDSE,1102)
+    CALL EXTCDE ( 1102 )
+2003 CONTINUE
+    IF ( IAPROC .EQ. NAPERR ) WRITE (NDSE,1003)
+    CALL EXTCDE ( 1003 )
+2104 CONTINUE
+    IF ( IAPROC .EQ. NAPERR ) WRITE (NDSE,1104) IERR
+    CALL EXTCDE ( 1104 )
+2004 CONTINUE
+    IF ( IAPROC .EQ. NAPERR ) WRITE (NDSE,1004) IERR
+    CALL EXTCDE ( 1004 )
+2005 CONTINUE
+    IF ( IAPROC .EQ. NAPERR ) WRITE (NDSE,1005) IDTST
+    CALL EXTCDE ( 1005 )
+2054 CONTINUE
+    IF ( IAPROC .EQ. NAPERR ) WRITE (NDSE,1054)
+    CALL EXTCDE ( 1054 )
+2006 CONTINUE
+    IF ( IAPROC .EQ. NAPERR ) WRITE (NDSE,1006) IDTST, NH(J)
+    CALL EXTCDE ( 1006 )
+2062 CONTINUE
+    IF ( IAPROC .EQ. NAPERR ) WRITE (NDSE,1062) IDTST
+    CALL EXTCDE ( 1062 )
+2007 CONTINUE
+    IF ( IAPROC .EQ. NAPERR ) WRITE (NDSE,1007)
+    CALL EXTCDE ( 1007 )
+2009 CONTINUE
+    IF ( IAPROC .EQ. NAPERR ) WRITE (NDSE,1009) ODAT(33), NINT(DTMAX)
+    CALL EXTCDE ( 1009 )
+2222 CONTINUE
     ! Formats
 900 FORMAT (/15X, '      *** WAVEWATCH III Program shell ***      '/   &
          15X,     '==============================================='/)

@@ -575,6 +575,8 @@ MODULE W3ODATMD
                                                        !! YYYY-MM-DD-SSSSS will be appended
   character(len=512) :: user_restfname = ''            !< @public user restart filename prefix, timestring
                                                        !! YYYY-MM-DD-SSSSS will be appended
+  logical            :: use_user_histname = .false.    !< @public logical flag for user set history filenames (CESM)
+  logical            :: use_user_restname = .false.    !< @public logical flag for user set restart filenames (CESM)
   logical            :: histwr = .false.               !< @public logical to trigger history write
                                                        !! if true => write history file (snapshot)
   logical            :: rstwr = .false.                !< @public logical to trigger restart write
@@ -914,7 +916,7 @@ CONTAINS
     IDOUT( 6,11)  = 'Wave-ice energy flux'
     IDOUT( 6,12)  = 'Split Surface Stokes'
     IDOUT( 6,13)  = 'Tot wav-ocn mom flux'
-    IDOUT( 6,14)  = 'Stokes drift sfc ave'
+    IDOUT( 6,14)  = 'Turbulent Langmuir number'
     !
     ! 7) Wave-bottom layer
     !

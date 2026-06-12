@@ -914,15 +914,15 @@ contains
       if (unstr_mesh) then
         call diagnose_mesh(EMesh, size(gindex_sea), 'EMesh', rc=rc)
         if (ChkErr(rc,__LINE__,u_FILE_u)) return
-        deallocate(gindex_sea)
       else
         call diagnose_mesh(EMesh, size(gindex), 'EMesh', rc=rc)
         if (ChkErr(rc,__LINE__,u_FILE_u)) return
-        deallocate(gindex)
-        deallocate(gindex_sea)
-        deallocate(gindex_lnd)
       end if
     end if
+
+    deallocate(gindex)
+    deallocate(gindex_sea)
+    deallocate(gindex_lnd)
 
     if (.not. unstr_mesh) then
       ! obtain the mesh mask and find the minimum value across all PEs
@@ -1494,10 +1494,11 @@ contains
   !!
   !> @author mvertens@ucar.edu, Denise.Worthen@noaa.gov
   !> @date 01-05-2022
-  subroutine waveinit_cesm(gcomp, ntrace, mpicomm, mds, rc)
+  subroutine waveinit_cesm(gcomp, ntrace, mpi_comm, mds, rc)
 
     ! Initialize ww3 for cesm (called from InitializeRealize)
 
+    use mpi_f08      , only : MPI_COMM_T => MPI_COMM
     use w3initmd     , only : w3init
     use w3gdatmd     , only : dtcfl, dtcfli, dtmax, dtmin
     use w3idatmd     , only : inflags1, inflags2
@@ -1512,11 +1513,12 @@ contains
     ! input/output variables
     type(ESMF_GridComp)   :: gcomp
     integer , intent(in)  :: ntrace(:)
-    type(MPI_COMM) , intent(in)  :: mpicomm
+    type(MPI_COMM) , intent(in)  :: mpi_comm
     integer , intent(in)  :: mds(:)
     integer , intent(out) :: rc
 
     ! local variables
+    type(MPI_COMM_T)  :: mpicomm_f08
     integer           :: ierr
     integer           :: unitn  ! namelist unit number
     real(r8)          :: dtmax_in  ! Maximum overall time step.
@@ -1569,7 +1571,7 @@ contains
     end if
 
     ! ESMF does not have a broadcast for chars
-    call mpi_bcast(initfile, len(initfile), MPI_CHARACTER, 0, mpicomm, ierr)
+    call mpi_bcast(initfile, len(initfile), MPI_CHARACTER, 0, mpi_comm, ierr)
     if (ierr /= MPI_SUCCESS) then
       call ESMF_LogWrite(trim(subname)//' error in mpi broadcast for initfile ', &
            ESMF_LOGMSG_ERROR, line=__LINE__, file=u_FILE_u)
@@ -1580,42 +1582,42 @@ contains
        ! Set branch_fname to initfile for branch runs
        branch_fname = trim(initfile) ! this will be a netcdf restart in this case
     end if
-    call mpi_bcast(dtcfl, 1, MPI_INTEGER, 0, mpicomm, ierr)
+    call mpi_bcast(dtcfl, 1, MPI_INTEGER, 0, mpi_comm, ierr)
     if (ierr /= MPI_SUCCESS) then
       call ESMF_LogWrite(trim(subname)//' error in mpi broadcast for dtcfl ',&
            ESMF_LOGMSG_ERROR, line=__LINE__, file=u_FILE_u)
       rc = ESMF_FAILURE
       return
     end if
-    call mpi_bcast(dtcfli, 1, MPI_INTEGER, 0, mpicomm, ierr)
+    call mpi_bcast(dtcfli, 1, MPI_INTEGER, 0, mpi_comm, ierr)
     if (ierr /= MPI_SUCCESS) then
       call ESMF_LogWrite(trim(subname)//' error in mpi broadcast for dtcfli ',&
            ESMF_LOGMSG_ERROR, line=__LINE__, file=u_FILE_u)
       rc = ESMF_FAILURE
       return
     end if
-    call mpi_bcast(dtmax, 1, MPI_INTEGER, 0, mpicomm, ierr)
+    call mpi_bcast(dtmax, 1, MPI_INTEGER, 0, mpi_comm, ierr)
     if (ierr /= MPI_SUCCESS) then
       call ESMF_LogWrite(trim(subname)//' error in mpi broadcast for dtmax ',&
            ESMF_LOGMSG_ERROR, line=__LINE__, file=u_FILE_u)
       rc = ESMF_FAILURE
       return
     end if
-    call mpi_bcast(dtmin, 1, MPI_INTEGER, 0, mpicomm, ierr)
+    call mpi_bcast(dtmin, 1, MPI_INTEGER, 0, mpi_comm, ierr)
     if (ierr /= MPI_SUCCESS) then
       call ESMF_LogWrite(trim(subname)//' error in mpi broadcast for dtmin ',&
            ESMF_LOGMSG_ERROR, line=__LINE__, file=u_FILE_u)
       rc = ESMF_FAILURE
       return
     end if
-    call mpi_bcast(history_n, 1, MPI_INTEGER, 0, mpicomm, ierr)
+    call mpi_bcast(history_n, 1, MPI_INTEGER, 0, mpi_comm, ierr)
     if (ierr /= MPI_SUCCESS) then
       call ESMF_LogWrite(trim(subname)//' error in mpi broadcast for history_n ',&
            ESMF_LOGMSG_ERROR, line=__LINE__, file=u_FILE_u)
       rc = ESMF_FAILURE
       return
     end if
-    call mpi_bcast(history_option, len(history_option), MPI_CHARACTER, 0, mpicomm, ierr)
+    call mpi_bcast(history_option, len(history_option), MPI_CHARACTER, 0, mpi_comm, ierr)
     if (ierr /= MPI_SUCCESS) then
       call ESMF_LogWrite(trim(subname)//' error in mpi broadcast for history_option ',&
            ESMF_LOGMSG_ERROR, line=__LINE__, file=u_FILE_u)
@@ -1629,7 +1631,7 @@ contains
 
     ! Read the namelist settings in ww3_shel.nml
     call ESMF_LogWrite(trim(subname)//' call read_shel_config', ESMF_LOGMSG_INFO)
-    call read_shel_config(mpicomm, mds, time0_overwrite=time0, timen_overwrite=timen)
+    call read_shel_config(mpi_comm, mds, time0_overwrite=time0, timen_overwrite=timen)
 
     ! NOTE:  that wavice_coupling must be set BEFORE the call to advertise_fields
     ! So the current mechanism is to force the inflags1(-7) and inflags1(-3) be set to true
@@ -1665,12 +1667,13 @@ contains
     ! IsMulti does not appear to be used, setting to .false.
 
     call ESMF_LogWrite(trim(subname)//' call w3init', ESMF_LOGMSG_INFO)
+    mpicomm_f08%MPI_VAL = mpi_comm
     if (cesmcoupled .and. runtype == 'branch') then
        call w3init ( 1, .false., 'ww3', mds, ntrace, odat, flgrd, flgr2, flgd, flg2, &
-            npts, x, y, pnames, iprt, prtfrm, mpicomm, branch_fname=initfile)
+            npts, x, y, pnames, iprt, prtfrm, mpi_comm_f08, branch_fname=initfile)
     else
        call w3init ( 1, .false., 'ww3', mds, ntrace, odat, flgrd, flgr2, flgd, flg2, &
-            npts, x, y, pnames, iprt, prtfrm, mpicomm)
+            npts, x, y, pnames, iprt, prtfrm, mpi_comm_f08)
     end if
 
     ! NOTE: these need to be set again AFTER w3init is run - since these values will be overwritten

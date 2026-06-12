@@ -1197,14 +1197,14 @@ CONTAINS
     !                                                 Module W3GDATMD
     IF ( WRITE ) THEN
       WRITE (NDSM)                                                &
-           E3DF, P2MSF, US3DF,USSPF, USSP_WN
+           E3DF, P2MSF, US3DF,USSPF, USSP_TAIL, USSP_WN
 #ifdef W3_ASCII
       WRITE (NDSA,*)                                              &
-           'E3DF, P2MSF, US3DF,USSPF, USSP_WN:',                  &
-           E3DF, P2MSF, US3DF,USSPF, USSP_WN
+           'E3DF, P2MSF, US3DF,USSPF, USSP_TAIL, USSP_WN:',      &
+           E3DF, P2MSF, US3DF,USSPF, USSP_TAIL, USSP_WN
 #endif
     ELSE
-      READ (NDSM,IOSTAT=IERR) E3DF, P2MSF, US3DF,USSPF, USSP_WN
+      READ (NDSM,IOSTAT=IERR) E3DF, P2MSF, US3DF,USSPF, USSP_TAIL, USSP_WN
       IF (IERR.NE.0) CALL EXTIOF(NDSE,IERR,'W3IOGR','mod_def.'//FILEXT(:IEXT),51)
     END IF
 

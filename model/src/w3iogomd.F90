@@ -2606,6 +2606,8 @@ CONTAINS
 #ifdef W3_S
     USE W3SERVMD, ONLY: STRACE
 #endif
+    use w3timemd   , only: set_user_timestring
+    use w3odatmd   , only: use_user_histname, user_histfname
 #ifdef W3_IS2
     USE W3WDATMD, ONLY: ICEF, ICEH
 #endif
@@ -2638,7 +2640,8 @@ CONTAINS
 #endif
     CHARACTER(LEN=30)       :: IDTST, TNAME
     CHARACTER(LEN=10)       :: VERTST
-
+    CHARACTER(len=512)      :: FNAME
+    character(len=16)       :: user_timestring    !YYYY-MM-DD-SSSSS
     ! DEFINED A LOCAL FNMPRE TO AVOID CHANGE THE GLOBAL VALUE
     CHARACTER(LEN=256)       :: FNMPRE_LOCAL
     !
@@ -2700,21 +2703,31 @@ CONTAINS
     IF ( IPASS.EQ.1 .AND. OFILES(1) .EQ. 0) THEN
       I      = LEN_TRIM(FILEXT)
       J      = LEN_TRIM(FNMPRE_LOCAL)
+      if (use_user_histname) then
+        if (len_trim(user_histfname) == 0 ) then
+          call extcde (60, MSG="user history filename requested"// &
+               " but not provided")
+        end if
+        call set_user_timestring(time,user_timestring)
+        fname = trim(user_histfname)//trim(user_timestring)
+      else
+        fname = 'out_grd.'//FILEXT(:I)
+      end if
       !
 #ifdef W3_T
-      WRITE (NDST,9001) FNMPRE_LOCAL(:J)//'out_grd.'//FILEXT(:I)
+      WRITE (NDST,9001) FNMPRE_LOCAL(:J)//trim(fname)
 #endif
       IF ( WRITE ) THEN
-        OPEN (NDSOG,FILE=FNMPRE_LOCAL(:J)//'out_grd.'//FILEXT(:I),    &
-             form ='UNFORMATTED', convert=file_endian,IOSTAT=IERR)
+        OPEN (NDSOG,FILE=FNMPRE_LOCAL(:J)//trim(fname),     &
+             form='UNFORMATTED', convert=file_endian,IOSTAT=IERR)
         IF (IERR.NE.0) CALL EXTOPN(NDSE,IERR,'W3IOGO','',41)
 #ifdef W3_ASCII
-        OPEN (NDSOA,FILE=FNMPRE_LOCAL(:J)//'out_grd.'//FILEXT(:I)//'.txt',    &
-             form ='FORMATTED',IOSTAT=IERR)
+        OPEN (NDSOA,FILE=FNMPRE_LOCAL(:J)//trim(fname)//'.txt',    &
+             form='FORMATTED',IOSTAT=IERR)
         IF (IERR.NE.0) CALL EXTOPN(NDSE,IERR,'W3IOGO','',41)
 #endif
       ELSE
-        OPEN (NDSOG,FILE=FNMPRE_LOCAL(:J)//'out_grd.'//FILEXT(:I),    &
+        OPEN (NDSOG,FILE=FNMPRE_LOCAL(:J)//trim(fname),     &
              form='UNFORMATTED', convert=file_endian,IOSTAT=IERR,STATUS='OLD')
         IF (IERR.NE.0) CALL EXTOPN(NDSE,IERR,'W3IOGO','',41)
       END IF
@@ -2786,19 +2799,29 @@ CONTAINS
     IF ( IPASS.GE.1 .AND. OFILES(1) .EQ. 1) THEN
       I      = LEN_TRIM(FILEXT)
       J      = LEN_TRIM(FNMPRE_LOCAL)
-      !
-      ! Create TIMETAG for file name using YYYYMMDD.HHMMS prefix
-      WRITE(TIMETAG, '(i8.8, ".", i6.6)') TIME(1), TIME(2)
+      if (use_user_histname) then
+        if (len_trim(user_histfname) == 0 ) then
+          call extcde (60, MSG="user history filename requested"// &
+               " but not provided")
+        end if
+        call set_user_timestring(time,user_timestring)
+        fname = trim(user_histfname)//trim(user_timestring)
+      else
+        !
+        ! Create TIMETAG for file name using YYYYMMDD.HHMMS prefix
+        WRITE(TIMETAG,"(i8.8,'.'i6.6)")TIME(1),TIME(2)
 #ifdef W3_T
-      WRITE (NDST,9001) FNMPRE_LOCAL(:J)//TIMETAG//'.out_grd.'//FILEXT(:I)
+        WRITE (NDST,9001) FNMPRE_LOCAL(:J)//TIMETAG//'.out_grd.'//FILEXT(:I)
 #endif
+        fname = TIMETAG//'.out_grd.'//FILEXT(:I)
+      end if
       IF ( WRITE ) THEN
-        OPEN (NDSOG,FILE=FNMPRE_LOCAL(:J)//TIMETAG//'.out_grd.'  &
-             //FILEXT(:I),form='UNFORMATTED', convert=file_endian,IOSTAT=IERR)
+        OPEN (NDSOG,FILE=FNMPRE_LOCAL(:J)//trim(fname),  &
+             form='UNFORMATTED', convert=file_endian,IOSTAT=IERR)
         IF (IERR.NE.0) CALL EXTOPN(NDSE,IERR,'W3IOGO','',41)
 #ifdef W3_ASCII
-        OPEN (NDSOA,FILE=FNMPRE_LOCAL(:J)//TIMETAG//'.out_grd.'  &
-             //FILEXT(:I)//'.txt',form='FORMATTED',IOSTAT=IERR)
+        OPEN (NDSOA,FILE=FNMPRE_LOCAL(:J)//trim(fname)//'.txt',  &
+             form='FORMATTED',IOSTAT=IERR)
         IF (IERR.NE.0) CALL EXTOPN(NDSE,IERR,'W3IOGO','',41)
 #endif
       ELSE
@@ -4006,10 +4029,13 @@ CONTAINS
               READ (NDSOG,IOSTAT=IERR) TAUOCX(1:NSEA)
               IF (IERR.NE.0) CALL EXTIOF(NDSE,IERR,'W3IOGO','',42)
               READ (NDSOG,IOSTAT=IERR) TAUOCY(1:NSEA)
+              IF (IERR.NE.0) CALL EXTIOF(NDSE,IERR,'W3IOGO','',42)
             ELSE IF ( IFI .EQ. 6 .AND. IFJ .EQ. 14 ) THEN
               READ (NDSOG,IOSTAT=IERR) USSHX(1:NSEA)
               IF (IERR.NE.0) CALL EXTIOF(NDSE,IERR,'W3IOGO','',42)
               READ (NDSOG,IOSTAT=IERR) USSHY(1:NSEA)
+              IF (IERR.NE.0) CALL EXTIOF(NDSE,IERR,'W3IOGO','',42)
+
               !
               !     Section 7)
               !
@@ -4260,8 +4286,8 @@ CONTAINS
     !
     !/ ------------------------------------------------------------------- /
     USE CONSTANTS, ONLY: TPIINV, GRAV, TPI
-    USE W3GDATMD,  ONLY: DDEN, DSII, SIG, NK, NTH, NSEAl,    &
-         ECOS, ESIN, US3DF, USSPF, USSP_WN
+    USE W3GDATMD,  ONLY: DDEN, DSII, XFR, SIG, NK, NTH, NSEAl,    &
+         ECOS, ESIN, US3DF, USSPF, USSP_TAIL, USSP_WN
     USE W3ADATMD,  ONLY: CG, WN, DW
     USE W3ADATMD,  ONLY: US3D, USSP
     USE W3PARALL,  ONLY: INIT_GET_ISEA
@@ -4284,10 +4310,11 @@ CONTAINS
 #ifdef W3_S
     INTEGER, SAVE           :: IENT = 0
 #endif
-    REAL                    :: FACTOR, FKD,KD
+    REAL                    :: FACTOR, FACTOR2, FKD, KD
     REAL                    :: ABX(NSEAL), ABY(NSEAL), USSCO
     REAL                    :: MINDIFF
     INTEGER                 :: Spc2Bnd(NK)
+    REAL                    :: ETUSCX(NSEAL), ETUSCY(NSEAL)
     !/
     !/ ------------------------------------------------------------------- /
     !/
@@ -4353,7 +4380,7 @@ CONTAINS
       !
       !
 #ifdef W3_OMPG
-      !$OMP PARALLEL DO PRIVATE(JSEA,ISEA,FACTOR,KD,FKD,USSCO,MINDIFF,IB)
+      !$OMP PARALLEL DO PRIVATE(JSEA,ISEA,FACTOR,FACTOR2,KD,FKD,USSCO,MINDIFF,IB)
 #endif
       !
       DO JSEA=1, NSEAL
@@ -4396,6 +4423,15 @@ CONTAINS
           !Put spectral energey into whichever band central wavenumber fits in
           USSP(JSEA,Spc2Bnd(IK))    =  USSP(JSEA,Spc2Bnd(IK)) + ABX(JSEA)*USSCO
           USSP(JSEA,NK+Spc2BND(IK)) =  USSP(JSEA,NK+Spc2Bnd(IK)) + ABY(JSEA)*USSCO
+
+          ! add tail contribution to the last band (if requested)
+          IF (USSP_TAIL .and. IK.EQ.NK) THEN
+            FACTOR2       = SIG(IK)**5/(GRAV**2)/DSII(IK)
+            ETUSCX(JSEA)  = ABX(JSEA)*FACTOR*FACTOR2
+            ETUSCY(JSEA)  = ABY(JSEA)*FACTOR*FACTOR2
+            USSP(JSEA,USSPF(2))    =  USSP(JSEA,USSPF(2)) + 2*GRAV*ETUSCX(JSEA)/SIG(NK)
+            USSP(JSEA,NK+USSPF(2)) =  USSP(JSEA,NK+USSPF(2)) + 2*GRAV*ETUSCY(JSEA)/SIG(NK)
+          ENDIF
         ENDIF
       END DO
 #ifdef W3_OMPG
