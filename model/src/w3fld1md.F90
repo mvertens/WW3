@@ -1140,7 +1140,6 @@ CONTAINS
         end if
       ENDDO
     ENDDO
-
     DO T=1, NTH
       angdif=th(t)-wnddir
       IF (COS(ANGDIF) .GT. 0.0) THEN

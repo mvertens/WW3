@@ -184,7 +184,7 @@ CONTAINS
     !             per meter. This is very strong attenuation, as shown in
     !             Figure 3 of CR17! This problem might be fixed by computing
     !             an encounter interval length scale from an a_ice and d_ice
-    !             provided by the user...or a length scale provided by the
+    !             provided by the user...or a length scale provided by the 
     !             user.
     !             See also: page 3 of Rogers et al. (RYW2021).
     !     4) Eq. 1 from Kohout et al. 2014

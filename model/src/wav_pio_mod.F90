@@ -70,7 +70,6 @@ contains
     integer            , intent(in)    :: numprocs
     integer            , intent(out)   :: rc
 
-    ! local variables
     integer           :: pio_numiotasks
     integer           :: pio_stride
     integer           :: pio_rearranger
