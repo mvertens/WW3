@@ -10,6 +10,7 @@
 module wav_shel_inp
 
   use w3odatmd, only: nogrp, ngrpp
+  use mpi_f08
 
   implicit none
   private ! except
@@ -30,8 +31,6 @@ module wav_shel_inp
   logical, public           :: flg2(nogrp)        !< @public flags for whole group - not currently used in cesm
   real, allocatable, public :: x(:)               !< @public x locations for point output
   real, allocatable, public :: y(:)               !< @public y locations for point output
-
-  include "mpif.h"
 
   !===============================================================================
 contains
@@ -100,14 +99,15 @@ contains
   !===============================================================================
   !> Read ww3_shel.inp Or ww3_shel.nml
   !!
-  !! @param[in]  mpi_comm           mpi communicator
+  !! @param[in]  mpicomm            mpi communicator
   !!
   !> @author mvertens@ucar.edu, Denise.Worthen@noaa.gov
   !> @date 01-05-2022
-  subroutine read_shel_config(mpi_comm, mds, time0_overwrite, timen_overwrite)
+  subroutine read_shel_config(mpicomm, mds, time0_overwrite, timen_overwrite, rstfldlist)
 
     use wav_shr_flags
-    use mpi_f08        , only : MPI_COMM_T => MPI_COMM
+    use wav_shr_mod    , only : inst_suffix
+    use wav_kind_mod   , only : CL => shr_kind_cl
     use w3nmlshelmd    , only : nml_domain_t, nml_input_t, nml_output_type_t
     use w3nmlshelmd    , only : nml_output_date_t, nml_output_path_t, nml_homog_count_t, nml_homog_input_t
     use w3nmlshelmd    , only : w3nmlshel
@@ -132,15 +132,15 @@ contains
     use w3odatmd      , only : use_historync
 
     ! input/output parameters
-    integer, intent(in) :: mpi_comm
-    integer, intent(in) :: mds(:)
-    integer, intent(in), optional :: time0_overwrite(2)
-    integer, intent(in), optional :: timen_overwrite(2)
+    type(MPI_COMM),    intent(in) :: mpicomm
+    integer,           intent(in) :: mds(:)
+    integer,           intent(in),  optional :: time0_overwrite(2)
+    integer,           intent(in),  optional :: timen_overwrite(2)
+    character(len=CL), intent(out), optional :: rstfldlist
 
     ! local parameters
     integer, parameter  :: nhmax =    200
 
-    type(MPI_COMM_T)          :: mpicomm_f08
     type(nml_domain_t)       :: nml_domain
     type(nml_input_t)        :: nml_input
     type(nml_output_type_t)  :: nml_output_type
@@ -262,7 +262,7 @@ contains
     ! Read nml file if available
     !--------------------
 
-    filename = trim(fnmpre)//"wav_in"
+    filename = trim(fnmpre)//"wav_in"//trim(inst_suffix)
     inquire(file=trim(filename), exist=flgnml)
 
     if (flgnml) then
@@ -272,8 +272,7 @@ contains
       ! Read namelist
       !--------------------
 
-      mpicomm_f08%MPI_VAL = mpi_comm
-      call w3nmlshel (mpicomm_f08, ndsi, trim(filename), nml_domain, nml_input, &
+      call w3nmlshel (mpicomm, ndsi, trim(filename), nml_domain, nml_input, &
            nml_output_type, nml_output_date, nml_output_path, nml_homog_count, nml_homog_input, ierr)
 
       !--------------------
@@ -648,6 +647,13 @@ contains
       ! Extra fields to be written in the restart
       fldrst = nml_output_type%restart%extra
       call w3flgrdflag ( ndso, ndso, ndse, fldrst, flogr, flogrr, iaproc, napout, ierr )
+      if (present(rstfldlist)) then
+        if (trim(fldrst) .ne. 'unset')then
+          rstfldlist = trim(fldrst)
+        else
+          rstfldlist = ' '
+        end if
+      end if
       if ( ierr .ne. 0 ) goto 2222
 
       ! force minimal allocation to avoid memory seg fault
@@ -776,6 +782,12 @@ contains
 
       call print_logmsg(740+IAPROC, ' fnmpre'//trim(fnmpre), w3_debuginit_flag)
       open (newunit=ndsi,file=trim(fnmpre)//'ww3_shel.inp',status='old',iostat=ierr)
+      if ( ierr /= 0 ) then
+        if ( iaproc .eq. naperr ) write (ndse,'(a)') 'read_shel_config: cannot open '// &
+             trim(fnmpre)//'ww3_shel.inp (and '//trim(fnmpre)//'wav_in'//trim(inst_suffix)// &
+             ' was not found)'
+        call extcde ( 60 )
+      end if
       rewind (ndsi)
 
       read (ndsi,'(a)') comstr
@@ -1014,7 +1026,7 @@ contains
                 else
                   ndsi2  = ndss
 #ifdef W3_MPI
-                  call mpi_barrier (mpi_comm,ierr_mpi)
+                  call mpi_barrier (mpicomm,ierr_mpi)
 #endif
                   open (ndss,file=trim(fnmpre)//'ww3_shel.scratch')
                   rewind (ndss)
@@ -1067,12 +1079,12 @@ contains
               if ( npts.eq.0 .and. iaproc.eq.napout ) write (ndso,2947)
               if ( iaproc .eq. 1 ) then
 #ifdef W3_MPI
-                call mpi_barrier ( mpi_comm, ierr_mpi )
+                call mpi_barrier ( mpicomm, ierr_mpi )
 #endif
                 close (ndss,status='delete')
               else
 #ifdef W3_MPI
-                call mpi_barrier ( mpi_comm, ierr_mpi )
+                call mpi_barrier ( mpicomm, ierr_mpi )
 #endif
                 close (ndss)
               end if

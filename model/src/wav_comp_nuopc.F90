@@ -45,9 +45,11 @@ module wav_comp_nuopc
   use wav_shr_mod           , only : merge_import, dbug_flag
   use w3odatmd              , only : nds, iaproc, napout
   use w3odatmd              , only : runtype, user_histfname, user_restfname, verboselog
+  use w3odatmd              , only : use_user_histname, use_user_restname
   use w3odatmd              , only : use_historync, use_restartnc, restart_from_binary, logfile_is_assigned
   use w3odatmd              , only : time_origin, calendar_name, elapsed_secs
-  use wav_shr_mod           , only : casename, inst_suffix, inst_index, inst_name, unstr_mesh
+  use wav_shr_mod           , only : casename, inst_suffix, inst_index, unstr_mesh
+  use wav_shr_mod           , only : inst_name
   use wav_wrapper_mod       , only : ufs_settimer, ufs_logtimer, ufs_file_setlogunit, wtime
 #ifndef W3_CESMCOUPLED
   use shr_is_restart_fh_mod , only : init_is_restart_fh, is_restart_fh, is_restart_fh_type
@@ -303,8 +305,11 @@ contains
     rc = ESMF_SUCCESS
     call ESMF_LogWrite(trim(subname)//' called', ESMF_LOGMSG_INFO)
 
-    ! if we're here, then cmeps is active
-    use_cmeps = .true.
+    ! if we're here, then cmeps is active. In CESM, use_cmeps is kept false:
+    ! it selects UFS's direct-forcing path in the WW3 core (minimal w3idatmd/w3adatmd
+    ! allocations, no time interpolation in w3updtmd), whereas the CESM import code
+    ! fills the classic interpolated forcing arrays.
+    if (.not. cesmcoupled) use_cmeps = .true.
 
     !----------------------------------------------------------------------------
     ! retrieve configuration settings
@@ -623,6 +628,9 @@ contains
     !--------------------------------------------------------------------
 
     if (cesmcoupled) then
+      ! custom restart and history file names are used for CESM
+      use_user_histname = .true.
+      use_user_restname = .true.
       if (len_trim(inst_suffix) > 0) then
         user_restfname = trim(casename)//'.ww3'//trim(inst_suffix)//'.r.'
         user_histfname = trim(casename)//'.ww3'//trim(inst_suffix)//'.hi.'
@@ -631,9 +639,9 @@ contains
         user_histfname = trim(casename)//'.ww3.hi.'
       endif
 
-      ! netcdf is used for CESM history and restart
+      ! netcdf (PIO) is used for CESM gridded history output; restarts
+      ! remain binary, with the initial file read via initfile (see waveinit_cesm)
       use_historync = .true.
-      use_restartnc = .true.
     else
       call NUOPC_CompAttributeGet(gcomp, name='use_restartnc', value=cvalue, isPresent=isPresent, isSet=isSet, rc=rc)
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
@@ -680,7 +688,9 @@ contains
       if (root_task) write(stdout,'(a,l4)') trim(subname)//': Wave restart_from_binary setting is ',restart_from_binary
     end if
 
-    if (use_restartnc .or. use_historync) then
+    ! In CESM, component PIO is set up by the driver only after all components have
+    ! advertised (PostChildrenAdvertise), so wav_pio_init is deferred to InitializeRealize
+    if (.not. cesmcoupled .and. (use_restartnc .or. use_historync)) then
       call wav_pio_init(gcomp, mpicomm%mpi_val, stdout, naproc/num_threads, rc)
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
     end if
@@ -764,6 +774,7 @@ contains
     use w3wdatmd    , only : time
     use w3parall    , only : init_get_isea
     use wav_shr_mod , only : diagnose_mesh, write_meshdecomp, wav_loginit
+    use wav_pio_mod , only : wav_pio_init
 #ifdef W3_PDLIB
     use yowNodepool , only : ng
 #endif
@@ -796,6 +807,7 @@ contains
     integer(i4)                  :: maskmin
     integer(i4), pointer         :: meshmask(:)
     integer                      :: iam
+    integer                      :: localcomm
     character(len=*), parameter  :: subname = '(wav_comp_nuopc:InitializeRealize)'
     ! -------------------------------------------------------------------
 
@@ -811,6 +823,16 @@ contains
     call ESMF_GridCompGet(gcomp, vm=vm, localPet=iam, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
+#ifdef W3_CESMCOUPLED
+    ! Initialize PIO. In CESM, component PIO is set up by the driver between the
+    ! advertise and realize phases (PostChildrenAdvertise), so this cannot be done
+    ! in InitializeAdvertise. It needs to be done prior to the first history write.
+    if (use_restartnc .or. use_historync) then
+      call ESMF_VMGet(vm, mpiCommunicator=localcomm, rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+      call wav_pio_init(gcomp, localcomm, stdout, naproc, rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    end if
     call ESMF_ClockGet( clock, startTime=startTime, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
     call ESMF_TimeGet( startTime, yy=yy, mm=mm, dd=dd, s=start_tod, rc=rc )
@@ -1254,6 +1276,9 @@ contains
   subroutine ModelSetRunClock(gcomp, rc)
 
     use wav_shel_inp , only : odat
+    use wav_shr_mod  , only : dtime_drv
+    use nuopc_shr_methods, only : get_minimum_timestep
+
     ! input/output variables
     type(ESMF_GridComp)  :: gcomp
     integer, intent(out) :: rc
@@ -1494,17 +1519,16 @@ contains
   !!
   !> @author mvertens@ucar.edu, Denise.Worthen@noaa.gov
   !> @date 01-05-2022
-  subroutine waveinit_cesm(gcomp, ntrace, mpi_comm, mds, rc)
+  subroutine waveinit_cesm(gcomp, ntrace, mpicomm, mds, rc)
 
     ! Initialize ww3 for cesm (called from InitializeRealize)
 
-    use mpi_f08      , only : MPI_COMM_T => MPI_COMM
     use w3initmd     , only : w3init
     use w3gdatmd     , only : dtcfl, dtcfli, dtmax, dtmin
     use w3idatmd     , only : inflags1, inflags2
     use w3odatmd     , only : initfile
     use wav_shr_mod  , only : casename
-    use wav_shr_mod  , only : inst_index, inst_name, inst_suffix
+    use wav_shr_mod  , only : inst_index, inst_suffix
     use wav_shr_mod  , only : wav_coupling_to_cice
     use wav_shel_inp , only : read_shel_config
     use wav_shel_inp , only : npts, odat, iprt, x, y, pnames, prtfrm
@@ -1513,12 +1537,11 @@ contains
     ! input/output variables
     type(ESMF_GridComp)   :: gcomp
     integer , intent(in)  :: ntrace(:)
-    type(MPI_COMM) , intent(in)  :: mpi_comm
+    type(MPI_COMM) , intent(in)  :: mpicomm
     integer , intent(in)  :: mds(:)
     integer , intent(out) :: rc
 
     ! local variables
-    type(MPI_COMM_T)  :: mpicomm_f08
     integer           :: ierr
     integer           :: unitn  ! namelist unit number
     real(r8)          :: dtmax_in  ! Maximum overall time step.
@@ -1571,7 +1594,7 @@ contains
     end if
 
     ! ESMF does not have a broadcast for chars
-    call mpi_bcast(initfile, len(initfile), MPI_CHARACTER, 0, mpi_comm, ierr)
+    call mpi_bcast(initfile, len(initfile), MPI_CHARACTER, 0, mpicomm, ierr)
     if (ierr /= MPI_SUCCESS) then
       call ESMF_LogWrite(trim(subname)//' error in mpi broadcast for initfile ', &
            ESMF_LOGMSG_ERROR, line=__LINE__, file=u_FILE_u)
@@ -1582,28 +1605,28 @@ contains
        ! Set branch_fname to initfile for branch runs
        branch_fname = trim(initfile) ! this will be a netcdf restart in this case
     end if
-    call mpi_bcast(dtcfl, 1, MPI_INTEGER, 0, mpi_comm, ierr)
+    call mpi_bcast(dtcfl, 1, MPI_INTEGER, 0, mpicomm, ierr)
     if (ierr /= MPI_SUCCESS) then
       call ESMF_LogWrite(trim(subname)//' error in mpi broadcast for dtcfl ',&
            ESMF_LOGMSG_ERROR, line=__LINE__, file=u_FILE_u)
       rc = ESMF_FAILURE
       return
     end if
-    call mpi_bcast(dtcfli, 1, MPI_INTEGER, 0, mpi_comm, ierr)
+    call mpi_bcast(dtcfli, 1, MPI_INTEGER, 0, mpicomm, ierr)
     if (ierr /= MPI_SUCCESS) then
       call ESMF_LogWrite(trim(subname)//' error in mpi broadcast for dtcfli ',&
            ESMF_LOGMSG_ERROR, line=__LINE__, file=u_FILE_u)
       rc = ESMF_FAILURE
       return
     end if
-    call mpi_bcast(dtmax, 1, MPI_INTEGER, 0, mpi_comm, ierr)
+    call mpi_bcast(dtmax, 1, MPI_INTEGER, 0, mpicomm, ierr)
     if (ierr /= MPI_SUCCESS) then
       call ESMF_LogWrite(trim(subname)//' error in mpi broadcast for dtmax ',&
            ESMF_LOGMSG_ERROR, line=__LINE__, file=u_FILE_u)
       rc = ESMF_FAILURE
       return
     end if
-    call mpi_bcast(dtmin, 1, MPI_INTEGER, 0, mpi_comm, ierr)
+    call mpi_bcast(dtmin, 1, MPI_INTEGER, 0, mpicomm, ierr)
     if (ierr /= MPI_SUCCESS) then
       call ESMF_LogWrite(trim(subname)//' error in mpi broadcast for dtmin ',&
            ESMF_LOGMSG_ERROR, line=__LINE__, file=u_FILE_u)
@@ -1631,7 +1654,7 @@ contains
 
     ! Read the namelist settings in ww3_shel.nml
     call ESMF_LogWrite(trim(subname)//' call read_shel_config', ESMF_LOGMSG_INFO)
-    call read_shel_config(mpi_comm, mds, time0_overwrite=time0, timen_overwrite=timen)
+    call read_shel_config(mpicomm, mds, time0_overwrite=time0, timen_overwrite=timen)
 
     ! NOTE:  that wavice_coupling must be set BEFORE the call to advertise_fields
     ! So the current mechanism is to force the inflags1(-7) and inflags1(-3) be set to true
@@ -1667,13 +1690,12 @@ contains
     ! IsMulti does not appear to be used, setting to .false.
 
     call ESMF_LogWrite(trim(subname)//' call w3init', ESMF_LOGMSG_INFO)
-    mpicomm_f08%MPI_VAL = mpi_comm
     if (cesmcoupled .and. runtype == 'branch') then
        call w3init ( 1, .false., 'ww3', mds, ntrace, odat, flgrd, flgr2, flgd, flg2, &
-            npts, x, y, pnames, iprt, prtfrm, mpi_comm_f08, branch_fname=initfile)
+            npts, x, y, pnames, iprt, prtfrm, mpicomm, branch_fname=initfile)
     else
        call w3init ( 1, .false., 'ww3', mds, ntrace, odat, flgrd, flgr2, flgd, flg2, &
-            npts, x, y, pnames, iprt, prtfrm, mpi_comm_f08)
+            npts, x, y, pnames, iprt, prtfrm, mpicomm)
     end if
 
     ! NOTE: these need to be set again AFTER w3init is run - since these values will be overwritten
