@@ -729,7 +729,8 @@ contains
     real(R8)          :: fillvalue = zero                      ! special missing value
 #endif
     type(ESMF_State)  :: exportState
-    integer           :: jsea, isea, ix, iy, ib
+    type(ESMF_State)  :: importState ! needed if aux history is output by cmeps
+    integer           :: n, jsea, isea, ix, iy, ib
 
     real(r8), pointer :: z0rlen(:)
     real(r8), pointer :: charno(:)
@@ -743,6 +744,12 @@ contains
     real(r8), pointer :: sxxn(:)
     real(r8), pointer :: sxyn(:)
     real(r8), pointer :: syyn(:)
+
+    real(r8), pointer :: sw_lamult(:)
+    !real(r8), pointer :: sw_lasl(:)
+    real(r8), pointer :: sw_ustokes(:)
+    real(r8), pointer :: sw_vstokes(:)
+    real(r8), pointer :: sw_hstokes(:)
     real(r8), pointer :: sw_hs(:)
     real(r8), pointer :: sw_bhd(:)
     real(r8), pointer :: sw_tauox(:)
@@ -755,14 +762,6 @@ contains
     real(r8), pointer :: sw_t01(:)
     real(r8), pointer :: sw_t0m1(:)
     real(r8), pointer :: sw_wnmean(:)
-
-    real(r8), pointer :: sw_ustokes(:)
-    real(r8), pointer :: sw_vstokes(:)
-    real(r8), pointer :: sw_hstokes(:)
-
-    real(r8), pointer :: sxxn(:)
-    real(r8), pointer :: sxyn(:)
-    real(r8), pointer :: syyn(:)
 
     real(r8), pointer :: sa_u(:)
     real(r8), pointer :: sa_v(:)

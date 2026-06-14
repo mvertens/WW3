@@ -34,7 +34,7 @@ contains
   subroutine ufs_file_setLogUnit(filename,nunit,runtimelog)
     character(len=*),  intent(in)  :: filename
     logical,           intent(in)  :: runtimelog
-    integer,           intent(out) :: nunit
+    integer,           intent(out) :: nunit 
   end subroutine ufs_file_setLogUnit
   subroutine ufs_logfhour(msg,hour)
     character(len=*),  intent(in)  :: msg
