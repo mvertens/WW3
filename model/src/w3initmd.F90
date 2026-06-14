@@ -454,6 +454,7 @@ CONTAINS
 #ifdef W3_PIO
     use wav_restart_mod, only : read_restart
     use w3odatmd,        only : runtype, restart_from_binary, use_restartnc, user_restfname
+    use w3odatmd,        only : use_user_restname, initfile
 #endif
     !/
 #ifdef W3_MPI
