@@ -230,9 +230,7 @@ contains
 
     if (cesmcoupled) then
       call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_lamult' )
-      !call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_lasl' )
-      call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_ustokes')
-      call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_vstokes')
+     !call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_lasl' )
       call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_hstokes')
     else
       call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_z0')
@@ -254,12 +252,13 @@ contains
     end if
     call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_pstokes_x', ungridded_lbound=1, ungridded_ubound=3)
     call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_pstokes_y', ungridded_lbound=1, ungridded_ubound=3)
+
     if (cesmcoupled) then
-      ! diagnostic fields passed to the mediator
-      call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_Hs')
-      call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_t01')
-      call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_t0m1')
-      call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_thm')
+      ! diagnostic fields passed to the mediator - TODO: these must be added to the NorESM cmeps
+      ! call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_Hs')
+      ! call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_t01')
+      ! call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_t0m1')
+      ! call fldlist_add(fldsFrWav_num, fldsFrWav, 'Sw_thm')
     end if
 
     if (aux_flds_to_cmeps) then
@@ -732,53 +731,43 @@ contains
     type(ESMF_State)  :: importState ! needed if aux history is output by cmeps
     integer           :: n, jsea, isea, ix, iy, ib
 
-    real(r8), pointer :: z0rlen(:)
-    real(r8), pointer :: charno(:)
-#ifdef W3_CESMCOUPLED
-    real(r8), pointer :: sw_lamult(:)
-    real(r8), pointer :: sw_lasl(:)
-#endif
-    real(r8), pointer :: sw_ustokes(:)
-    real(r8), pointer :: sw_vstokes(:)
+    real(r8), pointer :: z0rlen(:)     ! ufs (Sw_z0) 
+    real(r8), pointer :: charno(:)     ! ufs (Sw_ch)
+    real(r8), pointer :: sxxn(:)       ! ufs (Sw_wavsuu)
+    real(r8), pointer :: sxyn(:)       ! ufs (Sw_wavsuv)
+    real(r8), pointer :: syyn(:)       ! ufs (Sw_wavsvv) 
+    real(r8), pointer :: sw_bhd(:)     ! ufs (Sw_bhd)
+    real(r8), pointer :: sw_tauox(:)   ! ufs (Sw_tauox) 
+    real(r8), pointer :: sw_tauoy(:)   ! ufs (Sw_tauoy)
+    real(r8), pointer :: sw_taubblx(:) ! ufs (Sw_taubblx)
+    real(r8), pointer :: sw_taubbly(:) ! ufs (Sw_taubbly)
+    real(r8), pointer :: sw_ubrx(:)    ! ufs (Sw_ubrx)
+    real(r8), pointer :: sw_ubry(:)    ! ufs (Sw_ubry)
+    real(r8), pointer :: sw_wnmean(:)  ! ufs (Sw_wnmean)
 
-    real(r8), pointer :: sxxn(:)
-    real(r8), pointer :: sxyn(:)
-    real(r8), pointer :: syyn(:)
+    real(r8), pointer :: sw_lamult(:)  ! cesmcoupled (Sw_lamult)
+    real(r8), pointer :: sw_lasl(:)    ! cesmcoupled (Sw_lasl)
+    real(r8), pointer :: sw_ustokes(:) ! cesmcoupled (Sw_ustokes)
+    real(r8), pointer :: sw_vstokes(:) ! cesmcoupled (Sw_vstokes)
+    real(r8), pointer :: sw_hstokes(:) ! cesmcoupled (Sw_hstokes)
 
-    real(r8), pointer :: sw_lamult(:)
-    !real(r8), pointer :: sw_lasl(:)
-    real(r8), pointer :: sw_ustokes(:)
-    real(r8), pointer :: sw_vstokes(:)
-    real(r8), pointer :: sw_hstokes(:)
-    real(r8), pointer :: sw_hs(:)
-    real(r8), pointer :: sw_bhd(:)
-    real(r8), pointer :: sw_tauox(:)
-    real(r8), pointer :: sw_tauoy(:)
-    real(r8), pointer :: sw_taubblx(:)
-    real(r8), pointer :: sw_taubbly(:)
-    real(r8), pointer :: sw_ubrx(:)
-    real(r8), pointer :: sw_ubry(:)
-    real(r8), pointer :: sw_thm(:)
-    real(r8), pointer :: sw_t01(:)
-    real(r8), pointer :: sw_t0m1(:)
-    real(r8), pointer :: sw_wnmean(:)
-
-    real(r8), pointer :: sa_u(:)
-    real(r8), pointer :: sa_v(:)
-
-    real(r8), pointer :: so_u(:)
-    real(r8), pointer :: so_v(:)
-
-    real(r8), pointer :: si_ifrac(:)
-    real(r8), pointer :: si_thick(:)
-    real(r8), pointer :: sw_thm(:)
+    real(r8), pointer :: sw_hs(:)      ! cesmcoupled (Sw_Hs) diagnostic
+    real(r8), pointer :: sw_thm(:)     ! cesmcoupled (Sw_thm) diagnostic
+    real(r8), pointer :: sw_t01(:)     ! cesmcoupled (Sw_t01) diagnostic
+    real(r8), pointer :: sw_t0m1(:)    ! cesmcoupled (Sw_t0m1) diagnostic
+    real(r8), pointer :: sa_u(:)       ! cesmcoupled (Sa_u10m, Sw_u_avg) diagnostic
+    real(r8), pointer :: sa_v(:)       ! cesmcoupled (Sa_v10m, Sw_v_avg) diagnostic
+    real(r8), pointer :: so_u(:)       ! cesmcoupled (So_u, Sw_cu_avg) diagnostic  
+    real(r8), pointer :: so_v(:)       ! cesmcoupled (So_v, Sw_cv_avg) diagnostic
+    real(r8), pointer :: si_ifrac(:)   ! cesmcoupled (Si_ifrac, Sw_ifrac_avg) diagnostic
+    real(r8), pointer :: si_thick(:)   ! cesmcoupled (Si_thick, Sw_thick_avg) diagnostic
 
     ! d2 is location, d1 is frequency  - nwav_elev_spectrum frequencies will be used
     real(r8), pointer :: wave_elevation_spectrum(:,:)
 
     ! Partitioned stokes drift
-    real(r8), pointer :: sw_pstokes_x(:,:)
-    real(r8), pointer :: sw_pstokes_y(:,:)
+    real(r8), pointer :: sw_pstokes_x(:,:) ! ufs and cesmcoupled
+    real(r8), pointer :: sw_pstokes_y(:,:) ! ufs and cesmcoupled
 
     type(ESMF_Clock)  :: clock
     type(ESMF_Time)   :: currtime, nexttime
@@ -1266,7 +1255,6 @@ contains
        call accumulate(dataptr, counter_v_avg, accum_v_avg, sec_next, fillvalue, real(sa_v))
     end if
 
-
     ! zonal surface ocean current from the ocean model
     if (state_fldchk(exportState, 'Sw_cu_avg') .and. state_fldchk(importState, 'So_u')) then
        call state_getfldptr(exportState, 'Sw_cu_avg', dataptr, rc=rc)
@@ -1348,14 +1336,14 @@ contains
     end if
 
     ! Wave to ice stress x component
-        if (state_fldchk(exportState, 'Sw_tauicex_avg')) then
+    if (state_fldchk(exportState, 'Sw_tauicex_avg')) then
        call state_getfldptr(exportState, 'Sw_tauicex_avg', dataptr, rc=rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
        call accumulate(dataptr, counter_tauicex_avg, accum_tauicex_avg, sec_next, fillvalue, TAUICE(:,1))
     end if
 
     ! Wave to ice stress y component
-        if (state_fldchk(exportState, 'Sw_tauicey_avg')) then
+    if (state_fldchk(exportState, 'Sw_tauicey_avg')) then
        call state_getfldptr(exportState, 'Sw_tauicey_avg', dataptr, rc=rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
        call accumulate(dataptr, counter_tauicey_avg, accum_tauicey_avg, sec_next, fillvalue, TAUICE(:,2))

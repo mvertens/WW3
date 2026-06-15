@@ -837,12 +837,15 @@ contains
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
 #ifdef W3_CESMCOUPLED
+
+      call ESMF_VMGet(vm, mpiCommunicator=localcomm, rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+      mpicomm%mpi_val = localcomm
+
     ! Initialize PIO. In CESM, component PIO is set up by the driver between the
     ! advertise and realize phases (PostChildrenAdvertise), so this cannot be done
     ! in InitializeAdvertise. It needs to be done prior to the first history write.
     if (use_restartnc .or. use_historync) then
-      call ESMF_VMGet(vm, mpiCommunicator=localcomm, rc=rc)
-      if (ChkErr(rc,__LINE__,u_FILE_u)) return
       call wav_pio_init(gcomp, localcomm, stdout, naproc, rc)
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
     end if
@@ -855,8 +858,6 @@ contains
 
     time = time0
     call set_shel_io(stdout, mds, ntrace)
-    call ESMF_VMGet(vm, mpiCommunicator=mpicomm%mpi_val, rc=rc)
-    if (ChkErr(rc,__LINE__,u_FILE_u)) return
     call waveinit_cesm(gcomp, ntrace, mpicomm, mds, rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
@@ -1597,7 +1598,7 @@ contains
     real(r8)          :: dtcfli_in ! Maximum CFL time step X-Y propagation intra-spectral
     integer           :: stdout
     character(len=CL) :: branch_fname
-    character(len=*), parameter    :: subname = '(wav_comp_nuopc:wavinit_cesm)'
+    character(len=*), parameter    :: subname = '(wav_comp_nuopc:waveinit_cesm)'
     ! -------------------------------------------------------------------
 
     namelist /ww3_inparm/ initfile, dtcfl, dtcfli, dtmax, dtmin, history_option, history_n
@@ -1680,14 +1681,14 @@ contains
       rc = ESMF_FAILURE
       return
     end if
-    call mpi_bcast(history_n, 1, MPI_INTEGER, 0, mpi_comm, ierr)
+    call mpi_bcast(history_n, 1, MPI_INTEGER, 0, mpicomm, ierr)
     if (ierr /= MPI_SUCCESS) then
       call ESMF_LogWrite(trim(subname)//' error in mpi broadcast for history_n ',&
            ESMF_LOGMSG_ERROR, line=__LINE__, file=u_FILE_u)
       rc = ESMF_FAILURE
       return
     end if
-    call mpi_bcast(history_option, len(history_option), MPI_CHARACTER, 0, mpi_comm, ierr)
+    call mpi_bcast(history_option, len(history_option), MPI_CHARACTER, 0, mpicomm, ierr)
     if (ierr /= MPI_SUCCESS) then
       call ESMF_LogWrite(trim(subname)//' error in mpi broadcast for history_option ',&
            ESMF_LOGMSG_ERROR, line=__LINE__, file=u_FILE_u)
