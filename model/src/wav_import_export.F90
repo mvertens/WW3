@@ -2596,6 +2596,12 @@ contains
               if (counter(jsea) /= 0) then
                  dataptr(jsea) = accum(jsea) / counter(jsea)
               end if
+#ifdef WW3_DIAG_AVGCOUNT
+              ! TEMPORARY DIAGNOSTIC: export the per-point sample count instead
+              ! of the daily average, so the Sw_*_avg fields can be cprnc'd to
+              ! check whether the accumulation count differs between runs.
+              dataptr(jsea) = real(counter(jsea), r8)
+#endif
               counter(jsea) = 0
               accum(jsea) = 0._r8
            end if
@@ -2649,6 +2655,11 @@ contains
               else
                  dataptr(jsea) = 0
               end if
+#ifdef WW3_DIAG_AVGCOUNT
+              ! TEMPORARY DIAGNOSTIC: export the per-point sample count instead
+              ! of the daily average (see note in accumulate).
+              dataptr(jsea) = real(counter(jsea), r8)
+#endif
               counter(jsea) = 0
               accum(jsea) = 0._r8
            end if
@@ -2705,6 +2716,11 @@ contains
               if (counter(jsea) /= 0) then
                  dataptr(jsea)= atan2(yaccum(jsea)/counter(jsea),xaccum(jsea)/counter(jsea))
               end if
+#ifdef WW3_DIAG_AVGCOUNT
+              ! TEMPORARY DIAGNOSTIC: export the per-point sample count instead
+              ! of the daily average (see note in accumulate).
+              dataptr(jsea) = real(counter(jsea), r8)
+#endif
               counter(jsea) = 0
               xaccum(jsea) = 0._r8
               yaccum(jsea) = 0._r8
