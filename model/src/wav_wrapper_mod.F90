@@ -17,7 +17,7 @@ module wav_wrapper_mod
 
   real(r8) :: wtime = 0.0
 
-#ifdef CESMCOUPLED
+#ifdef W3_CESMCOUPLED
 contains
   ! Define stub routines that do nothing - they are just here to avoid
   ! having cppdefs in the main program

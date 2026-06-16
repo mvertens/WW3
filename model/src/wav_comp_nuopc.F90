@@ -1574,7 +1574,7 @@ contains
     use w3initmd     , only : w3init
     use w3gdatmd     , only : dtcfl, dtcfli, dtmax, dtmin
     use w3idatmd     , only : inflags1, inflags2
-    use w3odatmd     , only : initfile, restart_from_binary
+    use w3odatmd     , only : initfile
     use wav_shr_mod  , only : casename
     use wav_shr_mod  , only : inst_index, inst_suffix
     use wav_shr_mod  , only : wav_coupling_to_cice
@@ -1699,14 +1699,6 @@ contains
     dtcfl_in  = dtcfl
     dtcfli_in = dtcfli
     dtmin_in  = dtmin
-
-    ! Initial and branch runs start from the binary initial-condition file
-    ! (initfile, from the ww3_inparm namelist); continue runs read the netCDF
-    ! restart written by wav_restart_mod. restart_from_binary tells w3init/w3iors
-    ! to read the binary initfile rather than a netCDF restart.
-    if (trim(runtype) /= 'continue' .and. len_trim(initfile) > 0) then
-      restart_from_binary = .true.
-    end if
 
     ! Read the namelist settings in ww3_shel.nml
     call ESMF_LogWrite(trim(subname)//' call read_shel_config', ESMF_LOGMSG_INFO)

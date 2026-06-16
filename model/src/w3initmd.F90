@@ -984,37 +984,74 @@ CONTAINS
     VA(:,:) = 0.
 #ifdef W3_PIO
     if (use_restartnc) then
-      if (runtype == 'continue' .or. runtype == 'branch') then
-        if (runtype == 'continue') then
-           call set_user_timestring(time,user_timestring)
-           if (restart_from_binary) then
-              fname = trim(user_restfname)//trim(user_timestring)
-           else
-              fname = trim(user_restfname)//trim(user_timestring)//'.nc'
-           endif
-        else if (runtype == 'branch') then
-           ! this will only be valid for CESM - since a branch type is only valid for CESM
-           if (present(branch_fname)) then
-              fname = trim(branch_fname)
-           else
-              call extcde (60, msg="branch_fname optional argument must be present for branch runs ")
-           end if
-        end if
-        inquire(file=trim(fname), exist=exists)
-        if (exists) then
-          if (restart_from_binary) then
-            call w3iors('READ', nds(6), sig(nk), imod, filename=trim(fname))
-          else
+      call set_user_timestring(time,user_timestring)
+#ifdef W3_CESMCOUPLED
+      ! For W3_CESMCOUPLED assume only netcdf input
+      if (runtype == 'continue') then
+         fname = trim(user_restfname)//trim(user_timestring)//'.nc'
+         inquire(file=trim(fname), exist=exists)
+         if (exists) then
             call read_restart(trim(fname), va=va, mapsta=mapsta, mapst2=mapst2)
-          end if
+         else
+            call extcde (601, msg="required restart file " // trim(fname) // " does not exist")
+         end if
+      else if (runtype == 'branch') then
+         if (present(branch_fname)) then
+            fname = trim(branch_fname)
+         else
+            call extcde (602, msg="branch_fname optional argument must be present for branch runs ")
+         end if
+         inquire(file=trim(fname), exist=exists)
+         if (exists) then
+            call read_restart(trim(fname), va=va, mapsta=mapsta, mapst2=mapst2)
+         else
+            call extcde (603, msg="required branch file " // trim(fname) // " does not exist")
+         end if
+      else if (runtype == 'initial') then
+         if (initfile /= ' ') then 
+            inquire(file=trim(initfile), exist=exists)
+            if (exists) then
+               call read_restart(trim(initfile), va=va, mapsta=mapsta, mapst2=mapst2)
+            else
+               call extcde (604, msg="required netcdf initial file " // trim(initfile) // " does not exist")
+            end if
+            call read_restart(trim(initfile), va=va, mapsta=mapsta, mapst2=mapst2)
+         else
+            ! Initialize from calm initial conditions 
+            write(6,*)'DEBUG: i am here'
+            call read_restart('none')
+            ! mapst2 is module variable defined in read of mod_def; maptst is from 2.b above
+            flcold = .true.
+         end if
+      else
+         call extcde (60, msg="only initial, continue and branch runtypes are supported")
+      end if
+#else
+      call set_user_timestring(time,user_timestring)
+      if (restart_from_binary) then
+        fname = trim(user_restfname)//trim(user_timestring)
+      else
+        fname = trim(user_restfname)//trim(user_timestring)//'.nc'
+      endif
+      inquire(file=trim(fname), exist=exists)
+      if (exists) then
+        if (restart_from_binary) then
+          call w3iors('READ', nds(6), sig(nk), imod, filename=trim(fname))
         else
-          call extcde (60, msg="required restart file " // trim(fname) // " does not exist")
+      	  call read_restart(trim(fname), va=va, mapsta=mapsta, mapst2=mapst2)
         end if
       else
-        call read_restart('none')
-        ! mapst2 is module variable defined in read of mod_def; maptst is from 2.b above
-        flcold = .true.
+        if (runtype == 'continue') then
+          call extcde (60, msg="required restart file " // trim(fname) // " does not exist")
+        elseif (restart_from_binary) then
+          call extcde (60, msg="required restart file " // trim(fname) // " does not exist")
+        else
+          call read_restart('none')
+         ! mapst2 is module variable defined in read of mod_def; maptst is from 2.b above
+         flcold = .true.
+        endif
       end if
+#endif
     else
 #endif
 #ifdef W3_DEBUGCOH
