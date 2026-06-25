@@ -617,9 +617,20 @@ CONTAINS
           CALL EXTCDE ( 10 )
         END IF
         IF ( VERTST .NE. VERINI ) THEN
-          IF ( IAPROC .EQ. NAPERR )                               &
-               WRITE (NDSE,902) VERTST, VERINI
-          CALL EXTCDE ( 11 )
+          ! Backward compatibility: the FULL-type restart record layout is
+          ! unchanged between version '2021-05-28' (CESM3 release / dev_unified)
+          ! and the current VERINI -- the only differences in W3IORS are the
+          ! version-string bump and a GOTO cleanup. A legacy-version restart can
+          ! therefore be read safely; accept it with a warning instead of
+          ! aborting, so hybrid/branch runs remain backward compatible.
+          IF ( VERTST .EQ. '2021-05-28' ) THEN
+            IF ( IAPROC .EQ. NAPERR )                             &
+                 WRITE (NDSE,9021) VERTST, VERINI
+          ELSE
+            IF ( IAPROC .EQ. NAPERR )                             &
+                 WRITE (NDSE,902) VERTST, VERINI
+            CALL EXTCDE ( 11 )
+          END IF
         END IF
         IF ( TNAME .NE. GNAME ) THEN
           IF ( IAPROC .EQ. NAPERR )                               &
@@ -1640,6 +1651,10 @@ CONTAINS
 902 FORMAT (/' *** WAVEWATCH III ERROR IN W3IORS :'/                &
          '     ILLEGAL VERINI, READ : ',A/                      &
          '                    CHECK : ',A/)
+9021 FORMAT (/' *** WAVEWATCH III WARNING IN W3IORS :'/             &
+         '     READING LEGACY-VERSION RESTART, READ : ',A/       &
+         '                                  CURRENT : ',A/       &
+         '     RECORD LAYOUT IS COMPATIBLE; CONTINUING.'/)
 903 FORMAT (/' *** WAVEWATCH III WARNING IN W3IORS :'/              &
          '     ILLEGAL GNAME, READ : ',A/                       &
          '                   CHECK : ',A/)
