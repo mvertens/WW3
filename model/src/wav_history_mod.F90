@@ -522,7 +522,6 @@ contains
 
     call pio_closefile(pioid)
 
-#ifndef W3_CESMCOUPLED
     ! create indicator log file after NetCDF file is written
     if (iaproc == 1) then   ! only root processor writes the log file
       ! open the log file and write the complete message
@@ -531,7 +530,6 @@ contains
       call flush(log_unit)
       close(log_unit)
     end if
-#endif
 
   end subroutine write_history
 
