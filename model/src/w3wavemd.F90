@@ -557,9 +557,8 @@ CONTAINS
     use wav_restart_mod , only : write_restart
     use wav_history_mod , only : write_history
     use w3odatmd        , only : histwr, rstwr, user_restfname
-    use w3timemd        , only : set_user_timestring
-    USE W3ODATMD,         ONLY : FNMRST
-    USE W3GDATMD,         ONLY : MAPST2
+    USE W3ODATMD,         ONLY : fnmrst
+    USE W3GDATMD,         ONLY : mapst2
 #endif
     use w3odatmd        , only : use_historync, use_restartnc
     use w3odatmd        , only : logfile_is_assigned, verboselog
@@ -568,6 +567,9 @@ CONTAINS
 #endif
 #if defined(W3_T) || defined(W3_SBS)
     USE W3GDATMD,  ONLY : FILEXT
+#endif
+#ifdef W3_PDLIB
+    USE yowExchangeModule, only : PDLIB_exchange2Dreal_zero
 #endif
     !
 #ifdef W3_MPI 
@@ -680,10 +682,11 @@ CONTAINS
     REAL, ALLOCATABLE       :: BACSPEC(:)
     REAL                    :: BACANGL
 #endif
+    ! locally defined flags
     integer            :: memunit
 #ifdef W3_PIO
     character(len=16)  :: user_timestring    !YYYY-MM-DD-SSSSS
-    character(len=256) :: fname
+    character(len=256) :: fname 
 #endif
     !/ ------------------------------------------------------------------- /
     ! 0.  Initializations
@@ -1324,7 +1327,10 @@ CONTAINS
         call print_memcheck(memunit, 'memcheck_____:'//' WW3_WAVE TIME LOOP 7')
 
 #ifdef W3_PDLIB
-        CALL APPLY_BOUNDARY_CONDITION_VA
+        IF ( FLBPI ) THEN
+           CALL APPLY_BOUNDARY_CONDITION_VA
+           CALL PDLIB_exchange2DREAL_zero(VA)
+        END IF
 #ifdef W3_DEBUGCOH
         CALL ALL_VA_INTEGRAL_PRINT(IMOD, "After FLBPI and LOCAL", 1)
 #endif
@@ -2443,6 +2449,8 @@ CONTAINS
       !
       !
 #ifdef W3_PIO
+      ! dsec21(time, tend) == 0.0 checks whether time and tend are the
+      ! same instant — i.e. the current time has reached the output time (tend)
       if (dsec21(time,tend) == 0.0) then    ! req'd in case waves are running in slow loop
 
         if (use_historync) then
@@ -2463,15 +2471,13 @@ CONTAINS
         if (use_restartnc) then
           if (rstwr) then
             call set_user_timestring(tend,user_timestring)
-            fname = trim(FNMRST)//trim(user_restfname)//trim(user_timestring)//'.nc'
+            fname = trim(fnmrst)//trim(user_restfname)//trim(user_timestring)//'.nc'
             call write_restart(trim(fname), va, mapsta+8*mapst2)
           end if
         end if
 
       end if
 #endif
-
-
       IF ( TOFRST(1)  .EQ. -1 ) THEN
         DTTST  = 1.
       ELSE
