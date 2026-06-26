@@ -531,6 +531,20 @@ contains
       ! type 7 (coupling) output dates are always processed for the cap
       notype = 7
       ! history frequency is determined by history_n and history_option
+
+      ! note that odat(3) is the native WW3 output interval (seconds)
+      ! for type-1 gridded field output — set from nml_output_date%field%stride
+      ! When the CESM/NorESM netCDF (PIO) history path is active 
+      ! (use_historync) and the native WW3 interval is disabled
+      ! (odat(3) == 0), it still parses the field list and sets flgd/flgrd.
+      ! Why it's needed: in netCDF-history mode the output timing is driven by
+      ! THE history_n / history_option (per the comment) and not by odat(3) —
+      ! so the user sets odat(3) to 0 to turn off WW3's own periodic field writes.
+      ! But the netCDF writer still needs to know which fields to output. Without
+      ! this block, odat(3) == 0 would skip the call to w3fldgrdflag
+      ! leaving flgrd unset and nothing flagged for output. This block
+      ! fills in the field flags for that case, decoupling "what to write" (the field list)
+      ! from "when to write" (CESM/NorESM controlled).
       if (use_historync .and. odat(3) .eq. 0) then
         fldout = nml_output_type%field%list
         call w3flgrdflag ( ndso, ndso, ndse, fldout, flgd, flgrd, iaproc, napout, ierr )

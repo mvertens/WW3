@@ -582,7 +582,7 @@ contains
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
     endif
     ! Determine time attributes for history output
-    call ESMF_TimeGet( startTime, timeString=time_origin, calendar=calendar, rc=rc )
+    call ESMF_TimeGet( esmfTime, timeString=time_origin, calendar=calendar, rc=rc )
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
     time_origin = 'seconds since '//time_origin(1:10)//' '//time_origin(12:19)
     !call ESMF_ClockGet(clock, calendar=calendar)
@@ -838,14 +838,12 @@ contains
 
 #ifdef W3_CESMCOUPLED
 
-      call ESMF_VMGet(vm, mpiCommunicator=localcomm, rc=rc)
-      if (ChkErr(rc,__LINE__,u_FILE_u)) return
-      mpicomm%mpi_val = localcomm
-
     ! Initialize PIO. In CESM, component PIO is set up by the driver between the
     ! advertise and realize phases (PostChildrenAdvertise), so this cannot be done
     ! in InitializeAdvertise. It needs to be done prior to the first history write.
     if (use_restartnc .or. use_historync) then
+      call ESMF_VMGet(vm, mpiCommunicator=localcomm, rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
       call wav_pio_init(gcomp, localcomm, stdout, naproc, rc)
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
     end if
@@ -858,6 +856,8 @@ contains
 
     time = time0
     call set_shel_io(stdout, mds, ntrace)
+    call ESMF_VMGet(vm, mpiCommunicator=mpicomm%mpi_val, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
     call waveinit_cesm(gcomp, ntrace, mpicomm, mds, rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
@@ -990,10 +990,6 @@ contains
       end if
     end if
 
-    deallocate(gindex)
-    deallocate(gindex_sea)
-    deallocate(gindex_lnd)
-
     if (.not. unstr_mesh) then
       ! obtain the mesh mask and find the minimum value across all PEs
       call ESMF_MeshGet(EMesh, elementDistgrid=Distgrid, rc=rc)
@@ -1082,6 +1078,10 @@ contains
     real(r8), pointer :: sw_lasl(:)
     real(r8), pointer :: sw_ustokes(:)
     real(r8), pointer :: sw_vstokes(:)
+    real(r8), pointer :: Sw_Hs(:)
+    real(r8), pointer :: Sw_t01(:)
+    real(r8), pointer :: Sw_t0m1(:)
+    real(r8), pointer :: Sw_thm(:)
     real(r8), pointer :: wave_elevation_spectrum(:,:)
     character(len=*),parameter :: subname = '(wav_comp_nuopc:DataInitialize)'
     ! -------------------------------------------------------------------
@@ -1106,7 +1106,7 @@ contains
       ! note: the default value of this surface layer averaged Langmuir number
       ! should be a large number to be consistent with lamult=1., ustokes=0.,
       ! and vstokes=0.
-      sw_lasl (:) = 1.e6
+      sw_lasl(:) = 1.e6
     endif
     if (state_fldchk(exportState, 'Sw_ustokes')) then
       call state_getfldptr(exportState, 'Sw_ustokes', sw_ustokes, rc=rc)
@@ -1127,6 +1127,26 @@ contains
       call state_getfldptr(exportState, 'Sw_elevation_spectrum', wave_elevation_spectrum, rc=rc)
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
       wave_elevation_spectrum(:,:) = 0.
+    endif
+    if (state_fldchk(exportState, 'Sw_Hs')) then
+      call state_getfldptr(exportState, 'Sw_Hs', Sw_Hs, rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+      Sw_Hs (:) = 0.
+    endif
+    if (state_fldchk(exportState, 'Sw_t01')) then
+      call state_getfldptr(exportState, 'Sw_t01', Sw_t01, rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+      Sw_t01 (:) = 0.
+    endif
+    if (state_fldchk(exportState, 'Sw_t0m1')) then
+      call state_getfldptr(exportState, 'Sw_t0m1', Sw_t0m1, rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+      Sw_t0m1 (:) = 0.
+    endif
+    if (state_fldchk(exportState, 'Sw_thm')) then
+      call state_getfldptr(exportState, 'Sw_thm', Sw_thm, rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+      Sw_thm (:) = 0.
     endif
 
     if (.not. unstr_mesh) then
@@ -1716,13 +1736,14 @@ contains
     ! inflags2(4) is true if ice concentration was ever read during this simulation
     ! Currently IC4 is used in cesm
     inflags2(:) = .false.
-    inflags1(-7) = .true. ! ice thickness
     if (wav_coupling_to_cice) then
       inflags2(4)  = .true. ! inflags2(4) is true if ice concentration was read during initialization
+      inflags1(-7) = .true. ! ice thickness
       inflags2(-7) = .true. ! ice thickness
       inflags1(-3) = .true. ! ice floe size
       inflags2(-3) = .true. ! ice floe size
     else
+      inflags1(-7) = .false. ! ice thickness
       inflags2(-7) = .false. ! ice thickness
       inflags1(-3) = .false. ! ice floe size
       inflags2(-3) = .false. ! ice floe size
