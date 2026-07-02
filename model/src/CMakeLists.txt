@@ -145,4 +145,9 @@ add_executable(ww3_bounc ww3_bounc.F90)
 target_link_libraries(ww3_bounc PRIVATE wav ${NETCDF_Fortran_LIBRARIES})
 target_include_directories(ww3_bounc PRIVATE ${NETCDF_Fortran_INCLUDE_DIR})
 
+# Build ww3_ounp (added by Clio 25 June 2026)
+add_executable(ww3_ounp ww3_ounp.F90)
+target_link_libraries(ww3_ounp PRIVATE wav ${NETCDF_Fortran_LIBRARIES})
+target_include_directories(ww3_ounp PRIVATE ${NETCDF_Fortran_INCLUDE_DIR})
+
 install(TARGETS wav)
